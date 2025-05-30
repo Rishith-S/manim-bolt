@@ -1,13 +1,11 @@
+import { Result } from "./types";
 
 
 const sseConnections = new Map();
 
-export function addSSEConnection(userId:string,videoId:string,res:any) {
+export function addSSEConnection(userId: string, videoId: string, res: any) {
   const key = `${userId}-${videoId}`;
-  if (!sseConnections.has(key)) {
-    sseConnections.set(key,{});
-  }
-  sseConnections.set(key,res);
+  sseConnections.set(key, res);
 }
 
 export function removeSSEConnection(userId:string,videoId:string,res:any) {
@@ -17,7 +15,7 @@ export function removeSSEConnection(userId:string,videoId:string,res:any) {
   }
 }
 
-export function notifySSEClients(userId:string,videoId:string,result:any) {
+export function notifySSEClients(userId:string,videoId:string,result:Result) {
   const key = `${userId}-${videoId}`;
   if (sseConnections.has(key)) {
     const res = sseConnections.get(key);

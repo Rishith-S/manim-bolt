@@ -1,0 +1,30 @@
+@import "tailwindcss";
+
+:root {
+  background-color: black;
+}
+
+@font-face {
+  font-family: playful;
+  src: url('../../fe/src/assets/Audiowide-Regular.ttf');
+  font-weight: normal;
+  font-style: normal;
+}
+
+@theme {
+  --color-gray-75: #151515;
+  --color-gray-50: #1d1d1c;
+  --color-gray-25: #292928;
+  --font-playful: playful, 'sans-serif';
+}
+
+textarea::-webkit-scrollbar {
+  width: 6px;
+}
+
+textarea::-webkit-scrollbar-thumb {
+  cursor: pointer;
+  -webkit-border-radius: 2px;
+  border-radius: 8px;
+  background: rgba(175, 175, 175, 0.8); 
+}
