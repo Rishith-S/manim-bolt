@@ -14,3 +14,25 @@ datasource db {
   url       = env("DATABASE_URL")
   directUrl = env("DIRECT_URL")
 }
+
+model User {
+  id          String   @id @default(uuid())
+  name        String
+  email       String   @unique
+  accountType String
+  password    String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  videos      Video[]
+}
+
+model Video {
+  id        String   @id @default(uuid())
+  videoId   Int
+  userId    String
+  user      User     @relation(fields: [userId], references: [email])
+  prompt    Json[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([userId])
+}

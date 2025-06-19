@@ -1,0 +1,220 @@
+import { useEffect, useState } from 'react';
+import GoogleIcon from '../../assets/svg/google';
+import GithubIcon from '../../assets/svg/github';
+import InputBox from './InputBox';
+import { useNavigate, useParams } from 'react-router';
+import axios from 'axios';
+import type { UserDetails } from '../utils/Callback';
+
+export default function Auth() {
+    const {type} = useParams()
+    const texts = [
+        "Hello World!",
+        "Welcome to React",
+        "This is amazing!",
+        "Let's build something cool",
+        "Typewriter effects are fun!"
+    ];
+    const [currentTextIndex, setCurrentTextIndex] = useState(0);
+    const [currentText, setCurrentText] = useState('');
+    const [isDeleting, setIsDeleting] = useState(false);
+    const [email, setEmail] = useState('');
+    const [password, setPassword] = useState('');
+    const [loginOrSignup, setLoginOrSignup] = useState(type==='login'?true:false);
+    const [isLoading, setIsLoading] = useState(false);
+    const [error, setError] = useState("");
+    const navigate = useNavigate();
+    useEffect(() => {
+        const currentFullText = texts[currentTextIndex];
+
+        const timeout = setTimeout(() => {
+            if (!isDeleting) {
+                // Typing forward
+                if (currentText.length < currentFullText.length) {
+                    setCurrentText(currentFullText.substring(0, currentText.length + 1));
+                } else {
+                    // Finished typing, wait then start deleting
+                    setTimeout(() => setIsDeleting(true), 1500);
+                }
+            } else {
+                // Backspacing
+                if (currentText.length > 0) {
+                    setCurrentText(currentText.substring(0, currentText.length - 1));
+                } else {
+                    // Finished deleting, move to next text
+                    setIsDeleting(false);
+                    setCurrentTextIndex((prev) => (prev + 1) % texts.length);
+                }
+            }
+        }, 20); // Faster backspacing
+
+        return () => clearTimeout(timeout);
+    }, [currentText, isDeleting, currentTextIndex, texts]);
+
+    useEffect(() => {
+        setLoginOrSignup(type === 'login');
+    }, [type]);
+
+    const handleEmailLogin = async () => {
+        setIsLoading(true);
+        if (!email || !password) {
+          setError("Please enter both email and password");
+        } else {
+          try {
+            setError("");
+            const res = await axios.post(`${import.meta.env.VITE_SERVER_URL}/api/v1/auth/login/email-and-password`,{
+              email,
+              password
+            },{withCredentials:true});
+            const data = res.data as any;
+            if (typeof data !== "object" || data == null) {
+              setError("Unexpected server response");
+            } else if (data.status === "error") {
+              setError(typeof data.message === "string" ? data.message : "An error occurred");
+            } else {
+              const userDetails: UserDetails = res.data as unknown as UserDetails;
+              localStorage.setItem("name", userDetails.name);
+              localStorage.setItem("email", userDetails.email);
+              localStorage.setItem("accessToken", userDetails.accessToken);
+              navigate("/");
+            }
+          } catch (error: any) {
+            console.log(error);
+            if (error.response?.status === 401) {
+              setError("Invalid email or password");
+            } else {
+              setError(error instanceof Error ? error.message : "An unexpected error occurred");
+            }
+          } finally{
+            setIsLoading(false);
+          }
+        }
+      };
+    
+      const handleGoogleLogin = async () => {
+        console.log("google login");
+        setIsLoading(true);
+        setError("");
+        try {
+          const response = (await axios.get(`${import.meta.env.VITE_SERVER_URL}/api/v1/auth/url/${loginOrSignup ? "login" : "signup"}`)) as any;
+          console.log('response',response.data.url);
+          // OAuth requires redirect to external domain, so page refresh is necessary
+          window.location.assign(response.data.url);
+        } catch (error: any) {
+          console.log(error);
+          if (error.response?.status === 401) {
+            setError("Authentication failed. Please try again.");
+          } else {
+            navigate('/auth/login');
+          }
+        }
+        finally{
+          setIsLoading(false);
+        }
+      };
+
+    return (
+        <div className="min-h-screen flex bg-gray-75">
+            {/* Left side - Form */}
+            <div className="w-full md:w-1/2 bg-gray-75 flex items-center justify-center p-8">
+                <div className="w-full max-w-md">
+                    {/* Title */}
+                    <div className='mb-8'>
+                        <p className="text-4xl font-extrabold text-transparent bg-clip-text bg-gradient-to-tr from-orange-400 via-pink-400 to-purple-400 font-playful">
+                            ClipCraft
+                        </p>
+                    </div>
+                    <p className="text-white text-3xl font-bold mb-8">{loginOrSignup ? "Login" : "Sign Up"}</p>
+                    {/* Social buttons */}
+                    <div className="space-y-3 mb-6">
+                        <button
+                            className="w-full bg-gray-50 hover:bg-gray-800 border border-gray-25 rounded-lg py-1.5 px-4 text-white flex items-center justify-center gap-3 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                            onClick={handleGoogleLogin}
+                        >
+                            <GoogleIcon />
+                            <span className="text-sm">{loginOrSignup ? "Login" : "Sign Up"} with Google</span>
+                        </button>
+
+                        <button
+                            className="w-full bg-gray-50 hover:bg-gray-800 border border-gray-25 rounded-lg py-1.5 px-4 text-white flex items-center justify-center gap-3 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                            // onClick={handleGithubLogin} // TODO: Implement GitHub login handler
+                            disabled={isLoading}
+                        >
+                            <GithubIcon />
+                            <span className="text-sm">{loginOrSignup ? "Login" : "Sign Up"} with GitHub</span>
+                        </button>
+                    </div>
+
+                    {/* OR divider */}
+                    <div className="flex items-center mb-6">
+                        <div className="flex-1 h-px bg-gray-200/10"></div>
+                        <span className="px-4 text-gray-200/75 text-sm">OR</span>
+                        <div className="flex-1 h-px bg-gray-200/10"></div>
+                    </div>
+
+                    {/* Error message */}
+                    {error && (
+                        <div className="mb-4 text-red-400 text-center text-sm font-medium">{error}</div>
+                    )}
+
+                    {/* Email/Password Form */}
+                    <form onSubmit={handleEmailLogin}>
+                        {/* Email field */}
+                        <div className="mb-4">
+                            <InputBox value={email} setValue={setEmail} type="text" label='Email' disabled={isLoading} />
+                        </div>
+
+                        {/* Password field */}
+                        <div className="mb-6">
+                            <InputBox value={password} setValue={setPassword} type="password" label='Password' disabled={isLoading} />
+                        </div>
+
+                        {/* Sign up/login button */}
+                        <button
+                            type="submit"
+                            className="w-full bg-white text-black font-medium py-2 rounded-lg mb-6 hover:bg-gray-100 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                            disabled={isLoading}
+                        >
+                            {isLoading ? (
+                                <span>Loading...</span>
+                            ) : (
+                                loginOrSignup ? "Login" : "Sign Up"
+                            )}
+                        </button>
+                    </form>
+
+                    {/* Footer links */}
+                    <div className="text-center space-y-4">
+                        <p className="text-gray-400 text-sm">
+                            Don't have an account? <span onClick={() => { navigate(`/auth/${loginOrSignup ? "signup" : "login"}`, { replace: true })  }} className="text-white underline cursor-pointer">{loginOrSignup ? "Sign Up" : "Login"}</span>
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            {/* Right side - Gradient background with chat bubble */}
+            <div className="w-0 md:w-1/2 m-6 relative hidden md:flex items-center justify-center">
+                {/* Chat bubble */}
+                <div className="bg-[url('/src/assets/image.webp')] rounded-lg w-full h-full bg-cover absolute" />
+                <div className="absolute w-full px-24">
+                    <div className="bg-white rounded-2xl flex flex-row justify-between items-center px-6 py-4">
+                        <p className="text-gray-800 text-cente text-md">
+                            Ask ClipCraft to {" "}
+                            <span>
+                                {currentText}
+                                <span
+                                    className={`transition-opacity duration-100 text-xl text-center text-blue-500`}
+                                >
+                                    {" "}|
+                                </span>
+                            </span>
+                        </p>
+                        <button className="w-8 h-8 bg-black text-white rounded-full flex items-center justify-center text-2xl p-6">
+                            ↑
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+}

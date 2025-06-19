@@ -1,6 +1,7 @@
 import { ArrowUp } from 'lucide-react';
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
+import axios from 'axios';
 
 const Homepage: React.FC = () => {
     const [inputValue, setInputValue] = useState('');
@@ -42,66 +43,60 @@ const Homepage: React.FC = () => {
         return () => clearTimeout(timeout);
     }, [currentText, isDeleting, currentTextIndex, texts]);
 
-    const handlePromptSubmit = () => {
-        if(inputValue.length>0){
-            localStorage.setItem("prompt",inputValue);
-            navigate(`/videos/${1}`);
+    const handlePromptSubmit = async () => {
+        if (inputValue.length > 0) {
+            localStorage.setItem("prompt", inputValue);
+            const res = await axios.post(`${import.meta.env.VITE_SERVER_URL}/api/v1/execute/getVideoId`, {
+                withCredentials: true,
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                data: {
+                    userId: localStorage.getItem('userId'),
+                },
+            });
+            
+            // Type assertion to handle the response data
+            const responseData = res.data as { videoId: string };
+            navigate(`/videos/${responseData.videoId}`);
         }
     }
 
     return (
-        <div className='max-w-full h-screen overflow-hidden bg-gray-50'>
-            <div 
-                className="absolute h-[100%] w-[100%] z-20"
+        <div className='w-screen min-h-full z-10 overflow-y-auto bg-gray-50'>
+            <div
+                className="absolute h-[91.5%] w-[100%] z-20 pointer-events-none"
                 style={{
                     backgroundImage: 'url("/src/assets/noise.png")',
                     backgroundRepeat: 'repeat',
                     opacity: 0.35
                 }}
             />
-            <div 
-                className="absolute left-1/2 h-full w-full -translate-x-1/2 z-10 brightness-110"
+            <div
+                className="absolute left-1/2 h-[91.5%] w-full -translate-x-1/2 z-10 brightness-110 pointer-events-none"
                 style={{
                     backgroundImage: 'url("/src/assets/gradient-optimized.svg")',
-                    backgroundSize: '180% 3000px',
-                    backgroundRepeat: 'no-repeat',
+                    backgroundRepeat: 'repeat',
                     backgroundPosition: 'center top'
                 }}
             />
-            {/* Header */}
-            <header className="relative z-30 flex justify-between items-center max-w-7xl mx-auto p-6">
-                <div className="flex items-center space-x-3">
-                    <p className="text-4xl font-extrabold text-transparent bg-clip-text bg-gradient-to-tr from-orange-400 via-pink-400 to-purple-400 font-playful">
-                        ClipCraft
-                    </p>
-                </div>
-                <div className="flex space-x-4">
-                    <button onClick={()=>{navigate('/auth/login',{replace:true})}} className="px-4 py-2 text-white bg-gray-50 border-1 border-gray-25 hover:bg-gray-25 font-medium rounded-md">
-                        Log in
-                    </button>
-                    <button onClick={()=>{navigate('/auth/signup',{replace:true})}} className="px-4 py-2 bg-white text-black rounded-lg font-medium hover:bg-white/75">
-                        Sign up
-                    </button>
-                </div>
-            </header>
-
-            <main className="relative z-30 flex flex-col items-center justify-center min-h-[calc(100vh-80px)] px-6">
-                <div className="text-center mb-16 max-w-4xl">
+            <main className="relative z-30 flex flex-col items-center justify-center px-6">
+                <div className="text-center mt-24 max-w-4xl">
                     <h1 className="text-2xl md:text-5xl font-bold mb-4 text-white">
                         Build something <span className='font-playful text-blue-100'>ClipCraft</span>
                     </h1>
-                    <p className="text-lg md:text-xl text-white">
+                    <p className="text-lg mb-4 md:text-xl text-white">
                         Idea to video in seconds, with your personal <span className='underline font-playful text-yellow-100'>manim</span> video generator
                     </p>
                 </div>
 
                 {/* Input Section */}
-                <div className="w-full max-w-4xl mb-12">
+                <div className="w-full max-w-4xl mt-10">
                     <div className="bg-gray-50/95 rounded-xl p-6">
                         <div className="mb-6 text-white">
-                            <textarea 
-                                name="promptbox" 
-                                id="prompt" 
+                            <textarea
+                                name="promptbox"
+                                id="prompt"
                                 placeholder={`Ask ClipCraft to create a ${currentText}`}
                                 value={inputValue}
                                 onChange={(e) => setInputValue(e.target.value)}
@@ -110,9 +105,27 @@ const Homepage: React.FC = () => {
                         </div>
 
                         <div className="flex justify-end items-center">
-                            <button onClick={handlePromptSubmit} className={`w-8 h-8  rounded-full flex items-center justify-center ${inputValue.length>0?"bg-white hover:bg-blue-200":"bg-gray-400/85 cursor-not-allowed"}`}>
+                            <button onClick={handlePromptSubmit} className={`w-8 h-8  rounded-full flex items-center justify-center ${inputValue.length > 0 ? "bg-white hover:bg-blue-200" : "bg-gray-400/85 cursor-not-allowed"}`}>
                                 <ArrowUp className="w-4 h-4" strokeWidth={4} />
                             </button>
+                        </div>
+                    </div>
+                </div>
+                <div className='flex flex-col h-full w-[95%] mt-[10%] mb-6 rounded-lg bg-black px-4 py-2'>
+                    <div className='items-center flex '>
+                        <div className='font-bold rounded-sm px-3 text-white bg-orange-600 p-2'>R</div>
+                        <p className='text-white p-4'>Rishi's Work</p>
+                    </div>
+                    <div>
+                        <div onClick={() => {
+                            window.scrollTo({ top: 0, behavior: 'smooth' });
+                        setInputValue('');
+                        const textarea = document.getElementById('prompt') as HTMLTextAreaElement;
+                        if (textarea) {
+                            textarea.focus();
+                        }
+                        }} className='bg-gray-25 flex items-center justify-center my-2 rounded-md h-32 w-64 cursor-pointer'>
+                            <p className='text-md text-gray-100'>+ create video</p>
                         </div>
                     </div>
                 </div>

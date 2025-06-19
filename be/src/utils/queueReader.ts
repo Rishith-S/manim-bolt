@@ -8,6 +8,7 @@ import getPrompt from '../utils/prompt';
 import { supabase } from '../utils/supabase';
 import { QueueObject } from "./types";
 import { notifySSEClients } from './sse';
+import prisma from './prisma';
 
 
 let isProcessing = false;
@@ -49,7 +50,16 @@ export default async function processQueue() {
                 }
                 const apiKey = process.env.MISTRAL_API_KEY;
                 const client = new Mistral({ apiKey: apiKey });
-                const prompt = getPrompt(promptDetails.userPrompt);
+                let prompt = getPrompt(promptDetails.userPrompt);
+                const video = await prisma.video.findFirst({
+                    where: {
+                        userId: promptDetails.userId,
+                        videoId: parseInt(promptDetails.videoId),
+                    },
+                })
+                if (video) {
+                    prompt += `\n\nThe user has already created a video with the same prompt. Please edit the video to the user's request. The user's previous prompt was ${JSON.stringify(video.prompt)}`;
+                }
                 try {
                     const chatResponse = await client.chat.complete({
                         model: 'mistral-large-latest',
@@ -74,7 +84,7 @@ export default async function processQueue() {
                         // Delete directories if they exist
                         await fs.rm(inputDir, { recursive: true, force: true });
                         await fs.rm(outputDir, { recursive: true, force: true });
-                        
+
                         // Create fresh directories
                         await fs.mkdir(inputDir, { recursive: true });
                         await fs.mkdir(outputDir, { recursive: true });
@@ -83,6 +93,9 @@ export default async function processQueue() {
                         await fs.writeFile(inputFilePath, pythonCode);
 
                         try {
+                            // Pull the image if it doesn't exist
+                            await execAsync("docker pull manimcommunity/manim");
+
                             const dockerCommand = [
                                 "docker run --rm -i",
                                 `-v "${inputDir}:/manim_input:ro"`,
@@ -90,59 +103,81 @@ export default async function processQueue() {
                                 `-v "${process.cwd()}/script.sh:/script.sh:ro"`,
                                 "--network=none",
                                 "--memory=512m --cpus=1",
-                                `--user ${1}:${2}`,
                                 "manimcommunity/manim",
                                 "bash /script.sh"
                             ].join(" ");
 
-
-                            const { stderr } = await execAsync(dockerCommand);
-                            if (stderr) console.error("Docker errors:", stderr);
+                            await execAsync(dockerCommand);
                             // Check if Temp.mp4 was created
                             const finalVideoPath = path.join(outputDir, "Temp.mp4");
                             try {
                                 await fs.access(finalVideoPath);
-                                // Upload input Python file
-                                const inputFileBuffer = await fs.readFile(inputFilePath);
-                                const { error: inputError } = await supabase.storage
-                                    .from('manim-bolt')
-                                    .upload(`${promptDetails.userId}/${promptDetails.videoId}/temp.py`, inputFileBuffer, {
-                                        contentType: 'text/plain',
-                                        upsert: true
-                                    });
-
-                                if (inputError) {
-                                    console.error('Error uploading input file:', inputError);
-                                    throw inputError;
-                                }
-
                                 // Upload output video file
                                 const videoFileBuffer = await fs.readFile(finalVideoPath);
                                 const { error: videoError } = await supabase.storage
                                     .from('manim-bolt')
-                                    .upload(`${promptDetails.userId}/${promptDetails.videoId}/temp.mp4`, videoFileBuffer, {
+                                    .upload(`${promptDetails.userId}/${promptDetails.videoId}/temp-${(video?.prompt?.length || 0)+1}.mp4`, videoFileBuffer, {
                                         contentType: 'video/mp4',
                                         upsert: true
                                     });
-
                                 if (videoError) {
                                     console.error('Error uploading video file:', videoError);
                                     throw videoError;
                                 }
-
                                 // Get a signed URL for the video file (valid for 1 hour)
                                 const { data: signedUrlData, error: signedUrlError } = await supabase.storage
                                     .from('manim-bolt')
-                                    .createSignedUrl(`${promptDetails.userId}/${promptDetails.videoId}/temp.mp4`, 3600); // 3600 seconds = 1 hour
+                                    .createSignedUrl(`${promptDetails.userId}/${promptDetails.videoId}/temp-${(video?.prompt?.length || 0)+1}.mp4`,3600);
 
                                 if (signedUrlError) {
                                     console.error('Error getting signed URL:', signedUrlError);
                                     throw signedUrlError;
                                 }
 
-                                // Delete input and output files
-                                await fs.rm(inputDir, { recursive: true, force: true });
-                                await fs.rm(outputDir, { recursive: true, force: true });
+                                if (video == null) {
+                                    await prisma.video.create({
+                                        data: {
+                                            userId: promptDetails.userId,
+                                            videoId: parseInt(promptDetails.videoId),
+                                            prompt: [{
+                                                prompt: promptDetails.userPrompt,
+                                                pythonCode: pythonCode,
+                                            }],
+                                        }
+                                    })
+                                }
+                                else {
+                                    if (video.prompt.length == 0) {
+                                        await prisma.video.update({
+                                            where: {
+                                                id: video.id,
+                                            },
+                                            data: {
+                                                prompt: {
+                                                    push: {
+                                                        prompt: promptDetails.userPrompt,
+                                                        pythonCode: pythonCode,
+                                                    }
+                                                },
+                                            }
+                                        })
+                                    }
+                                    else {
+                                        await prisma.video.update({
+                                            where: {
+                                                id: video.id,
+                                            },
+                                            data: {
+                                                prompt: {
+                                                    push: {
+                                                        prompt: promptDetails.userPrompt,
+                                                        pythonCode: pythonCode,
+                                                    }
+                                                },
+                                            }
+                                        })
+                                    }
+                                }
 
                                 notifySSEClients(promptDetails.userId, promptDetails.videoId, {
                                     videoUrl: signedUrlData.signedUrl,
@@ -153,24 +188,30 @@ export default async function processQueue() {
                             } catch {
                                 console.error("Temp.mp4 not found after Docker run.");
                                 if (promptDetails.failureAttempts != 0) {
-                                    await fs.rm(inputDir, { recursive: true, force: true });
-                                    await fs.rm(outputDir, { recursive: true, force: true });
                                     setTimeout(async () => {
-                                      const retryPromptDetails: QueueObject = {
-                                        userId: promptDetails.userId,
-                                        videoId: promptDetails.videoId,
-                                        userPrompt: promptDetails.userPrompt,
-                                        failureAttempts: promptDetails.failureAttempts - 1,
-                                        delayBeforeTrials: promptDetails.delayBeforeTrials + 2,
-                                      };
-                                      await redis.lpush("foodIds", retryPromptDetails);
-                                      processQueue()
+                                        const retryPromptDetails: QueueObject = {
+                                            userId: promptDetails.userId,
+                                            videoId: promptDetails.videoId,
+                                            userPrompt: promptDetails.userPrompt,
+                                            failureAttempts: promptDetails.failureAttempts - 1,
+                                            delayBeforeTrials: promptDetails.delayBeforeTrials + 2,
+                                        };
+                                        await redis.lpush("foodIds", retryPromptDetails);
+                                        processQueue()
                                     }, promptDetails.delayBeforeTrials * 1000);
-                                  }
+                                }
                             }
                         } catch (err) {
                             console.error("Error running Docker:", err);
                             notifySSEClients(promptDetails.userId, promptDetails.videoId, { status: 'error', errormessage: "Internal server error" })
+                        } finally {
+                            // Always clean up directories regardless of success or failure
+                            try {
+                                await fs.rm(inputDir, { recursive: true, force: true });
+                                await fs.rm(outputDir, { recursive: true, force: true });
+                            } catch (cleanupError) {
+                                console.error("Error cleaning up directories:", cleanupError);
+                            }
                         }
 
                     } catch (error) {

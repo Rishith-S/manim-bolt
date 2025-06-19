@@ -1,13 +1,26 @@
 import express from 'express';
-import redis from '../utils/redis';
-import { QueueObject } from '../utils/types';
-import processQueue from '../utils/queueReader';
-import { addSSEConnection, removeSSEConnection } from '../utils/sse';
+import redis from '../redis';
+import { QueueObject } from '../types';
+import processQueue from '../queueReader';
+import { addSSEConnection, removeSSEConnection } from '../sse';
+import allowCredentials from '../../middleware/allowCredentials';
+import prisma from '../prisma';
 
 const router = express.Router();
 
-router.post('/videoPrompt', async (req, res) => {
-    const {userPrompt,userId,videoId} = req.body;
+router.post('/getVideoId', allowCredentials, async (req, res) => {
+    const { userId } = req.body;
+    const videoId = await prisma.video.findMany({
+        where: {
+            userId,
+        },
+    });
+    res.status(200).json({ 'videoId': videoId.length+1 });
+    return;
+});
+
+router.post('/videoPrompt', allowCredentials, async (req, res) => {
+    const {userPrompt,userId,videoId,type} = req.body;
     const queueObject : QueueObject = {
         userId,
         videoId,
@@ -21,7 +34,7 @@ router.post('/videoPrompt', async (req, res) => {
     return;
 });
 
-router.get('/job-events/:userId/:videoId', (req, res) => {
+router.get('/job-events/:userId/:videoId', allowCredentials,(req, res) => {
     const { videoId, userId } = req.params;
     // Set SSE headers
     res.writeHead(200, {

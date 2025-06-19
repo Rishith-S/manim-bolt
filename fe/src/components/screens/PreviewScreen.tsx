@@ -1,0 +1,371 @@
+import {
+    ArrowUp,
+    Camera,
+    Copy,
+    RefreshCw,
+    AlertCircle
+} from 'lucide-react';
+import { useEffect, useState, useCallback, useRef } from 'react';
+import { useParams } from 'react-router';
+import axios from 'axios';
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
+
+export interface Result {
+    status: string;
+    errormessage?: string;
+    videoUrl?: string;
+    pythonCode?: string;
+}
+
+export interface ChatMessage {
+    prompt: string;
+    pythonCode?: string;
+    errormessage?: string;
+    videoUrl?: string;
+}
+
+export default function PreviewScreen() {
+    const { videoId } = useParams();
+    const userId = localStorage.getItem('email');
+    const [isLoading, setLoading] = useState(false);
+    const [errorMessage, setErrorMessage] = useState('');
+    const [data, setData] = useState<Result>();
+    const [inputValue, setInputValue] = useState('')
+    const [promptData, setPromptData] = useState<ChatMessage[]>([{
+        prompt: localStorage.getItem('prompt') as string,
+        pythonCode: '',
+    }]);
+    const [type, setType] = useState(false);
+    const [selectedVideoIndex, setSelectedVideoIndex] = useState(0);
+    const chatEndRef = useRef<HTMLDivElement>(null);
+    const eventSourceRef = useRef<EventSource | null>(null);
+
+    const getChatHistory = async () => {
+        const res = await axios.post(`${import.meta.env.VITE_SERVER_URL}/api/v1/chatHistory/getChatHistory`, {
+            userId: userId,
+            videoId: videoId,
+        }, { withCredentials: true });
+        setPromptData((res.data as { chatHistory: ChatMessage[] }).chatHistory);
+        setType((res.data as { shouldInitialize: boolean }).shouldInitialize);
+    }
+
+    const handleEventSource = useCallback((eventSource: EventSource) => {
+        eventSource.onmessage = (event) => {
+            try {
+                const safeData = JSON.parse(event.data) as unknown as Result;
+                console.log('EventSource received data:', safeData);
+
+                if (safeData.status === "error") {
+                    setErrorMessage(safeData.errormessage!);
+                    setLoading(false);
+                    eventSource.close();
+                    return;
+                }
+                if (
+                    safeData.status &&
+                    (safeData.status === "close" || safeData.status === "error")
+                ) {
+                    setLoading(false);
+                    eventSource.close();
+                    return;
+                }
+                setData(safeData);
+                setPromptData(prev => {
+                    const lastPrompt = prev[prev.length - 1];
+                    const updatedLastPrompt = {
+                        ...lastPrompt,
+                        pythonCode: safeData.pythonCode ?? '',
+                        videoUrl: safeData.videoUrl ?? lastPrompt.videoUrl,
+                        errormessage: safeData.errormessage ?? lastPrompt.errormessage
+                    };
+                    const newPromptData = [...prev.slice(0, -1), updatedLastPrompt];
+                    // Auto-select the latest video when it's generated
+                    if (safeData.videoUrl) {
+                        console.log('Setting selectedVideoIndex to:', newPromptData.length - 1);
+                        setSelectedVideoIndex(newPromptData.length - 1);
+                    }
+                    return newPromptData;
+                });
+            } catch (error) {
+                console.error("Error parsing event data:", error);
+                setErrorMessage("Failed to process server response");
+                setLoading(false);
+                eventSource.close();
+            }
+        };
+
+        eventSource.onerror = (error) => {
+            console.error("EventSource error:", error);
+            setErrorMessage("Connection to server lost");
+            setLoading(false);
+            eventSource.close();
+        };
+    }, []);
+
+    const submitVideoPrompt = useCallback(async (prompt: string) => {
+        try {
+            await axios.post(
+                `${import.meta.env.VITE_SERVER_URL}/api/v1/execute/videoPrompt`,
+                { userId, videoId, userPrompt: prompt, type: false },
+                { withCredentials: true }
+            );
+        } catch (error) {
+            console.error("Error submitting video prompt:", error);
+            setErrorMessage("Failed to submit video prompt. Please try again.");
+            setLoading(false);
+        }
+    }, [userId, videoId]);
+
+    const initializeConnection = useCallback(async (prompt: string) => {
+        try {
+            setLoading(true);
+            setErrorMessage(''); // Clear any previous errors
+            if (eventSourceRef.current) {
+                eventSourceRef.current.close();
+            }
+            const es = new EventSource(
+                `${import.meta.env.VITE_SERVER_URL}/api/v1/execute/job-events/${userId}/${videoId}`
+            );
+            eventSourceRef.current = es;
+            handleEventSource(es);
+            await submitVideoPrompt(prompt);
+        } catch (error) {
+            console.error("Error initializing connection:", error);
+            setErrorMessage("Failed to initialize connection. Please refresh the page.");
+            setLoading(false);
+        } finally {
+            setLoading(false);
+        }
+    }, [userId, videoId, handleEventSource, submitVideoPrompt]);
+
+    // On mount or videoId change, run for the initial prompt
+    useEffect(() => {
+        const initializeScreen = async () => {
+            await getChatHistory();
+            if (type) {
+                setLoading(true);
+                console.log("Initializing connection");
+                initializeConnection(localStorage.getItem('prompt') as string);
+            }
+        };
+
+        initializeScreen();
+
+        return () => {
+            if (eventSourceRef.current) {
+                eventSourceRef.current.close();
+            }
+        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [videoId, type]);
+
+    useEffect(() => {
+        if (chatEndRef.current) {
+            chatEndRef.current.scrollIntoView({ behavior: 'smooth' });
+        }
+    }, [promptData, isLoading]);
+
+    const handlePromptSubmit = () => {
+        if (inputValue.length > 0) {
+            localStorage.setItem("prompt", inputValue);
+            setPromptData(prev => {
+                const newPrompts: ChatMessage[] = [
+                    ...prev,
+                    {
+                        prompt: inputValue,
+                        pythonCode: '',
+                    }
+                ];
+                // Set selected video index to the new prompt after it's added
+                console.log('Setting selectedVideoIndex to new prompt at index:', newPrompts.length - 1);
+                setSelectedVideoIndex(newPrompts.length - 1);
+                return newPrompts;
+            });
+            // Trigger new connection for the new prompt
+            initializeConnection(inputValue);
+            setInputValue('');
+        }
+    }
+
+    // Copy to clipboard handler
+    const handleCopy = (code: string) => {
+        navigator.clipboard.writeText(code);
+    };
+
+    return (
+        <div className="h-full flex flex-col overflow-hidden bg-gray-75 text-white">
+            {errorMessage && (
+                <div className="bg-red-500/10 bg-gray-75 border border-red-500/20 text-red-500 px-4 py-3 rounded-lg mx-4 mt-4 flex items-center gap-2">
+                    <AlertCircle className="w-5 h-5" />
+                    <p>{errorMessage}</p>
+                </div>
+            )}
+
+            <div className="flex flex-row w-screen h-full">
+                {/* Sidebar */}
+                <aside className="w-[35%] bg-gray-75 border-r border-gray-50 flex flex-col h-full">
+                    <div className="p-4 h-full flex-grow overflow-y-auto transition-all duration-300 custom-scrollbar">
+                        {promptData && promptData.length > 0 && promptData.map((msg, index) => (
+                            <div key={index} className="flex flex-col mt-4">
+                                {/* Prompt bubble: always right-aligned */}
+                                <div className="max-w-[85%] rounded-xl px-4 py-3 text-sm shadow-md mb-1 bg-gradient-to-br from-blue-500 to-blue-700 text-white self-end">{msg.prompt}</div>
+                                {/* Python code: always left-aligned if present */}
+                                {msg.pythonCode && (
+                                    <div className="relative group max-w-[85%] mt-2 self-start">
+                                        <div className="w-full bg-black rounded-xl">
+                                            <div className="w-full flex flex-row items-center gap-2 justify-between border-b border-blue-400 px-4 py-2">
+                                                <div>python</div>
+                                                <button
+                                                    onClick={() => handleCopy(msg.pythonCode!)}
+                                                    className="opacity-0 group-hover:opacity-100 border-1 border-gray-600 text-gray-600 px-2 py-1 rounded-md flex flex-row items-center gap-2 hover:text-gray-300 hover:border-gray-300 cursor-pointer transition-opacity duration-200"
+                                                >
+                                                    <Copy className="w-4 h-4" />
+                                                    <p>copy</p>
+                                                </button>
+                                            </div>
+                                            <SyntaxHighlighter
+                                                language="python"
+                                                style={vscDarkPlus}
+                                                customStyle={{
+                                                    padding: 16,
+                                                    margin: 0,
+                                                    borderRadius: '0.5rem',
+                                                    backgroundColor: 'black'
+                                                }}
+                                                wrapLongLines={true}
+                                                wrapLines={true}
+                                            >
+                                                {msg.pythonCode.length > 2000
+                                                    ? `${msg.pythonCode.slice(0, 1000)}...\n\n// Code truncated for display. Copy and paste in your own editor for full code.`
+                                                    : msg.pythonCode}
+                                            </SyntaxHighlighter>
+                                        </div>
+                                    </div>
+                                )}
+                                {msg.errormessage && (
+                                    <div className='w-full max-w-[85%] p-4 text-red-500 border border-red-500/20 rounded-xl mt-2 bg-red-950/30 self-start'>
+                                        <div className='flex items-center gap-2 mb-2'>
+                                            <AlertCircle className='w-4 h-4' />
+                                            <span className='font-medium'>Error</span>
+                                        </div>
+                                        <p className='text-sm'>{msg.errormessage}</p>
+                                    </div>
+                                )}
+                            </div>
+                        ))}
+                        {isLoading && (
+                            <div className="flex items-center gap-2 mt-4">
+                                <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
+                                <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
+                                <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
+                                <span className="text-xs text-gray-400 ml-2">AI is typing...</span>
+                            </div>
+                        )}
+                        <div ref={chatEndRef} />
+                    </div>
+
+                    {/* Bottom section */}
+                    <div className='flex p-4 flex-row justify-between border-t border-gray-25 bg-black gap-2 w-full transition-all duration-300 ease-in-out h-[10vh]'>
+                        <div className="text-white flex-grow">
+                            <textarea
+                                name="promptbox"
+                                id="prompt"
+                                placeholder="Ask ClipCraft to create a video..."
+                                value={inputValue}
+                                onChange={(e) => setInputValue(e.target.value)}
+                                className="w-full h-12 resize-none bg-gray-75 border border-gray-50 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-400 focus:outline-none focus:border-gray-25 transition-all duration-300 shadow-inner"
+                            />
+                        </div>
+                        <button
+                            onClick={handlePromptSubmit}
+                            disabled={inputValue.length === 0}
+                            className={`w-12 h-12 rounded-full flex items-center justify-center transition-colors text-black text-lg font-bold shadow-md ${inputValue.length > 0
+                                ? "bg-white hover:bg-blue-200 cursor-pointer"
+                                : "bg-gray-400/85 cursor-not-allowed"
+                                }`}
+                        >
+                            <ArrowUp className="w-5 h-5" strokeWidth={4} />
+                        </button>
+                    </div>
+                </aside>
+
+                {/* Main Content */}
+                <main className="bg-gray-75 w-full h-full flex flex-col">
+                    {(isLoading || !promptData[selectedVideoIndex]?.videoUrl) ? (
+                        <div className="flex flex-col items-center justify-center w-full h-full">
+                            <div className="w-16 h-16 mb-6">
+                                <div className="w-full h-full bg-gray-600 rounded-2xl animate-pulse"></div>
+                            </div>
+                            <p className="text-gray-400 text-lg mb-8">Spinning up preview...</p>
+
+                            <div className="space-y-6">
+                                <div className="flex items-center gap-3">
+                                    <Camera className="w-5 h-5 text-gray-500" />
+                                    <span className="text-gray-400 text-sm">Instantly preview your changes</span>
+                                </div>
+
+                                <div className="flex items-center gap-3">
+                                    <RefreshCw className="w-5 h-5 text-gray-500" />
+                                    <span className="text-gray-400 text-sm">Set custom knowledge for every edit</span>
+                                </div>
+
+                                <div className="flex items-center gap-3">
+                                    <div className="w-5 h-5 flex items-center justify-center">
+                                        <div className="w-3 h-3 bg-gray-500 rounded"></div>
+                                    </div>
+                                    <span className="text-gray-400 text-sm">Connect Supabase for backend</span>
+                                </div>
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="flex flex-col flex-grow">
+                            {/* Main video player */}
+                            <div>Video {selectedVideoIndex + 1}</div>
+                            <video
+                                controls
+                                className="w-full h-[80%] object-contain rounded-xl"
+                                src={promptData[selectedVideoIndex]?.videoUrl}
+                                onError={(e) => {
+                                    console.error("Video loading error:", e);
+                                    setErrorMessage("Failed to load video. Please try again.");
+                                }}
+                            >
+                                <source src={promptData[selectedVideoIndex]?.videoUrl} type="video/mp4" />
+                                Your browser does not support the video tag.
+                            </video>
+
+                            {/* Video thumbnails */}
+                            <div className="mt-6">
+                                <h3 className="text-gray-300 text-sm font-medium">Video History</h3>
+                                <div className="flex flex-row gap-3 overflow-x-auto custom-scrollbar mt-2 pt-2">
+                                    {promptData.map((_, index) => (
+                                        <div
+                                            key={index}
+                                            className={`flex flex-col items-center gap-2 min-w-[120px] group cursor-pointer hover:scale-105`}
+                                            onClick={() => {
+                                                console.log('Thumbnail clicked, setting selectedVideoIndex to:', index);
+                                                setSelectedVideoIndex(index);
+                                            }}
+                                        >
+                                            <div className={`w-20 h-20 rounded-lg overflow-hidden bg-gradient-to-br from-gray-700 to-gray-800 flex-shrink-0 border-2 border-gray-600 hover:border-blue-400 transition-colors duration-200 flex items-center justify-center relative ${selectedVideoIndex === index ? 'border-blue-400' : ''}`}>
+                                                <div
+                                                    className={`w-full flex h-full bg-black object-cover items-center justify-center ${selectedVideoIndex === index ? 'border-blue-400' : ''}   `}
+                                                >
+                                                    <div className="w-8 h-8 bg-white/20 rounded-full flex items-center justify-center">
+                                                        <div className="w-0 h-0 border-l-[8px] border-l-white border-t-[6px] border-t-transparent border-b-[6px] border-b-transparent ml-1"></div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <span className="text-xs text-gray-400 font-medium">Video {index + 1}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </main>
+            </div>
+        </div>
+    )
+}

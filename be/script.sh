@@ -7,6 +7,6 @@ if [ -f "$final_file" ]; then
   find /manim_output -mindepth 1 ! -path /manim_output/Temp.mp4 -delete
   find /manim_output -mindepth 1 -type d -empty -delete
 else
-  echo "Error: Temp.mp4 not found!"
+  echo "Error: Temp.mp4 not found in /manim_output!"
   exit 1
 fi
