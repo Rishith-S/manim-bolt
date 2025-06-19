@@ -19,18 +19,25 @@ export const useVideoGeneration = (userId: string, videoId: string) => {
                 const safeData = JSON.parse(event.data) as unknown as Result;
                 console.log('EventSource received data:', safeData);
 
+                // Handle initial connection message
+                if (safeData.status === "connected") {
+                    console.log('SSE connection established');
+                    return;
+                }
+
                 if (safeData.status === "error") {
                     setErrorMessage(safeData.errormessage!);
                     setLoading(false);
                     eventSource.close();
+                    return;
                 }
-                if (
-                    safeData.status &&
-                    (safeData.status === "close" || safeData.status === "error")
-                ) {
+                
+                if (safeData.status === "close") {
                     setLoading(false);
                     eventSource.close();
+                    return;
                 }
+                
                 setPromptData(prev => {
                     const lastPrompt = prev[prev.length - 1];
                     const updatedLastPrompt = {
@@ -46,8 +53,6 @@ export const useVideoGeneration = (userId: string, videoId: string) => {
                 setErrorMessage("Failed to process server response");
                 setLoading(false);
                 eventSource.close();
-            } finally {
-                setLoading(false);
             }
         };
 

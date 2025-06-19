@@ -10,6 +10,7 @@ import { useParams } from 'react-router';
 import axios from 'axios';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import toast from 'react-hot-toast';
 
 export interface Result {
     status: string;
@@ -26,67 +27,36 @@ export interface ChatMessage {
 }
 
 export default function PreviewScreen() {
-    const { videoId } = useParams();
+    const { videoId } = useParams<{ videoId: string }>();
     const userId = localStorage.getItem('email');
     const [isLoading, setLoading] = useState(false);
     const [errorMessage, setErrorMessage] = useState('');
-    const [data, setData] = useState<Result>();
-    const [inputValue, setInputValue] = useState('')
-    const [promptData, setPromptData] = useState<ChatMessage[]>([{
-        prompt: localStorage.getItem('prompt') as string,
-        pythonCode: '',
-    }]);
+    const [inputValue, setInputValue] = useState('');
+    const [promptData, setPromptData] = useState<ChatMessage[]>([]);
     const [type, setType] = useState(false);
     const [selectedVideoIndex, setSelectedVideoIndex] = useState(0);
     const chatEndRef = useRef<HTMLDivElement>(null);
     const eventSourceRef = useRef<EventSource | null>(null);
 
-    const getChatHistory = async () => {
-        const res = await axios.post(`${import.meta.env.VITE_SERVER_URL}/api/v1/chatHistory/getChatHistory`, {
-            userId: userId,
-            videoId: videoId,
-        }, { withCredentials: true });
-        setPromptData((res.data as { chatHistory: ChatMessage[] }).chatHistory);
-        setType((res.data as { shouldInitialize: boolean }).shouldInitialize);
-    }
-
     const handleEventSource = useCallback((eventSource: EventSource) => {
         eventSource.onmessage = (event) => {
             try {
-                const safeData = JSON.parse(event.data) as unknown as Result;
-                console.log('EventSource received data:', safeData);
-
+                const safeData = JSON.parse(event.data) as Result;
+                if (safeData.status === "connected") {
+                    return;
+                }
                 if (safeData.status === "error") {
-                    setErrorMessage(safeData.errormessage!);
+                    setErrorMessage(safeData.errormessage || "An error occurred.");
                     setLoading(false);
                     eventSource.close();
                     return;
                 }
-                if (
-                    safeData.status &&
-                    (safeData.status === "close" || safeData.status === "error")
-                ) {
+                if (safeData.status === "close") {
                     setLoading(false);
+                    getChatHistory();
                     eventSource.close();
                     return;
                 }
-                setData(safeData);
-                setPromptData(prev => {
-                    const lastPrompt = prev[prev.length - 1];
-                    const updatedLastPrompt = {
-                        ...lastPrompt,
-                        pythonCode: safeData.pythonCode ?? '',
-                        videoUrl: safeData.videoUrl ?? lastPrompt.videoUrl,
-                        errormessage: safeData.errormessage ?? lastPrompt.errormessage
-                    };
-                    const newPromptData = [...prev.slice(0, -1), updatedLastPrompt];
-                    // Auto-select the latest video when it's generated
-                    if (safeData.videoUrl) {
-                        console.log('Setting selectedVideoIndex to:', newPromptData.length - 1);
-                        setSelectedVideoIndex(newPromptData.length - 1);
-                    }
-                    return newPromptData;
-                });
             } catch (error) {
                 console.error("Error parsing event data:", error);
                 setErrorMessage("Failed to process server response");
@@ -94,9 +64,7 @@ export default function PreviewScreen() {
                 eventSource.close();
             }
         };
-
-        eventSource.onerror = (error) => {
-            console.error("EventSource error:", error);
+        eventSource.onerror = () => {
             setErrorMessage("Connection to server lost");
             setLoading(false);
             eventSource.close();
@@ -118,12 +86,20 @@ export default function PreviewScreen() {
     }, [userId, videoId]);
 
     const initializeConnection = useCallback(async (prompt: string) => {
+        if (!prompt.trim()) {
+            console.warn("Empty prompt provided to initializeConnection");
+            return;
+        }
+
         try {
             setLoading(true);
-            setErrorMessage(''); // Clear any previous errors
+            setErrorMessage('');
+            
+            // Always close existing connection first
             if (eventSourceRef.current) {
                 eventSourceRef.current.close();
             }
+
             const es = new EventSource(
                 `${import.meta.env.VITE_SERVER_URL}/api/v1/execute/job-events/${userId}/${videoId}`
             );
@@ -134,31 +110,62 @@ export default function PreviewScreen() {
             console.error("Error initializing connection:", error);
             setErrorMessage("Failed to initialize connection. Please refresh the page.");
             setLoading(false);
-        } finally {
-            setLoading(false);
         }
     }, [userId, videoId, handleEventSource, submitVideoPrompt]);
 
-    // On mount or videoId change, run for the initial prompt
+    const getChatHistory = async () => {
+        try {
+            setLoading(true);
+            const res = await axios.post(`${import.meta.env.VITE_SERVER_URL}/api/v1/chatHistory/getChatHistory`, {
+                userId,
+                videoId,
+            }, { withCredentials: true });
+            const chatHistory = (res.data as { chatHistory: ChatMessage[] }).chatHistory;
+            const shouldInit = (res.data as { shouldInitialize: boolean }).shouldInitialize;
+            
+            setPromptData(chatHistory);
+            setType(shouldInit);
+            
+            if (chatHistory.length > 0) {
+                setSelectedVideoIndex(chatHistory.length - 1);
+            }
+        } catch (error) {
+            console.error("Error getting chat history:", error);
+            setErrorMessage("Failed to get chat history. Please try again.");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    // Separate useEffect for handling type changes
     useEffect(() => {
-        const initializeScreen = async () => {
-            await getChatHistory();
+        const handleInitialization = async () => {
             if (type) {
-                setLoading(true);
-                console.log("Initializing connection");
-                initializeConnection(localStorage.getItem('prompt') as string);
+                const savedPrompt = localStorage.getItem('prompt');
+                if (savedPrompt) {
+                    try {
+                        await initializeConnection(savedPrompt);
+                    } catch (error) {
+                        console.error("Error during initialization:", error);
+                        setErrorMessage("Failed to initialize with saved prompt.");
+                    }
+                }
             }
         };
 
-        initializeScreen();
+        handleInitialization();
+    }, [type, initializeConnection]);
 
+    // Separate useEffect for initial load and cleanup
+    useEffect(() => {
+        getChatHistory();
+        
         return () => {
             if (eventSourceRef.current) {
                 eventSourceRef.current.close();
             }
         };
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [videoId, type]);
+    }, [videoId]);
 
     useEffect(() => {
         if (chatEndRef.current) {
@@ -166,8 +173,25 @@ export default function PreviewScreen() {
         }
     }, [promptData, isLoading]);
 
+    useEffect(() => {
+        if (errorMessage) {
+            toast.error(errorMessage);
+            setErrorMessage('');
+        }
+    }, [errorMessage]);
+
+    useEffect(() => {
+        if (
+            promptData.length > 0 &&
+            promptData[promptData.length - 1].videoUrl
+        ) {
+            setSelectedVideoIndex(promptData.length - 1);
+            setLoading(false);
+        }
+    }, [promptData]);
+
     const handlePromptSubmit = () => {
-        if (inputValue.length > 0) {
+        if (inputValue.trim().length > 0) {
             localStorage.setItem("prompt", inputValue);
             setPromptData(prev => {
                 const newPrompts: ChatMessage[] = [
@@ -177,36 +201,30 @@ export default function PreviewScreen() {
                         pythonCode: '',
                     }
                 ];
-                // Set selected video index to the new prompt after it's added
-                console.log('Setting selectedVideoIndex to new prompt at index:', newPrompts.length - 1);
                 setSelectedVideoIndex(newPrompts.length - 1);
                 return newPrompts;
             });
-            // Trigger new connection for the new prompt
             initializeConnection(inputValue);
             setInputValue('');
         }
-    }
+    };
 
-    // Copy to clipboard handler
     const handleCopy = (code: string) => {
         navigator.clipboard.writeText(code);
     };
 
-    return (
-        <div className="h-full flex flex-col overflow-hidden bg-gray-75 text-white">
-            {errorMessage && (
-                <div className="bg-red-500/10 bg-gray-75 border border-red-500/20 text-red-500 px-4 py-3 rounded-lg mx-4 mt-4 flex items-center gap-2">
-                    <AlertCircle className="w-5 h-5" />
-                    <p>{errorMessage}</p>
-                </div>
-            )}
+    const videoUrl = selectedVideoIndex < promptData.length
+        ? promptData[selectedVideoIndex]?.videoUrl
+        : promptData[promptData.length - 1]?.videoUrl;
 
+    return (
+        <div className="h-full flex flex-col z-10 overflow-hidden bg-gray-75 text-white">
+            {/* Error message is handled by toast, so no need to render here */}
             <div className="flex flex-row w-screen h-full">
                 {/* Sidebar */}
                 <aside className="w-[35%] bg-gray-75 border-r border-gray-50 flex flex-col h-full">
                     <div className="p-4 h-full flex-grow overflow-y-auto transition-all duration-300 custom-scrollbar">
-                        {promptData && promptData.length > 0 && promptData.map((msg, index) => (
+                        {promptData.length > 0 && promptData.map((msg, index) => (
                             <div key={index} className="flex flex-col mt-4">
                                 {/* Prompt bubble: always right-aligned */}
                                 <div className="max-w-[85%] rounded-xl px-4 py-3 text-sm shadow-md mb-1 bg-gradient-to-br from-blue-500 to-blue-700 text-white self-end">{msg.prompt}</div>
@@ -218,6 +236,7 @@ export default function PreviewScreen() {
                                                 <div>python</div>
                                                 <button
                                                     onClick={() => handleCopy(msg.pythonCode!)}
+                                                    aria-label="Copy Python code"
                                                     className="opacity-0 group-hover:opacity-100 border-1 border-gray-600 text-gray-600 px-2 py-1 rounded-md flex flex-row items-center gap-2 hover:text-gray-300 hover:border-gray-300 cursor-pointer transition-opacity duration-200"
                                                 >
                                                     <Copy className="w-4 h-4" />
@@ -264,7 +283,6 @@ export default function PreviewScreen() {
                         )}
                         <div ref={chatEndRef} />
                     </div>
-
                     {/* Bottom section */}
                     <div className='flex p-4 flex-row justify-between border-t border-gray-25 bg-black gap-2 w-full transition-all duration-300 ease-in-out h-[10vh]'>
                         <div className="text-white flex-grow">
@@ -275,12 +293,14 @@ export default function PreviewScreen() {
                                 value={inputValue}
                                 onChange={(e) => setInputValue(e.target.value)}
                                 className="w-full h-12 resize-none bg-gray-75 border border-gray-50 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-400 focus:outline-none focus:border-gray-25 transition-all duration-300 shadow-inner"
+                                aria-label="Prompt input"
                             />
                         </div>
                         <button
                             onClick={handlePromptSubmit}
-                            disabled={inputValue.length === 0}
-                            className={`w-12 h-12 rounded-full flex items-center justify-center transition-colors text-black text-lg font-bold shadow-md ${inputValue.length > 0
+                            disabled={inputValue.trim().length === 0}
+                            aria-label="Submit prompt"
+                            className={`w-12 h-12 rounded-full flex items-center justify-center transition-colors text-black text-lg font-bold shadow-md ${inputValue.trim().length > 0
                                 ? "bg-white hover:bg-blue-200 cursor-pointer"
                                 : "bg-gray-400/85 cursor-not-allowed"
                                 }`}
@@ -289,27 +309,23 @@ export default function PreviewScreen() {
                         </button>
                     </div>
                 </aside>
-
                 {/* Main Content */}
-                <main className="bg-gray-75 w-full h-full flex flex-col">
-                    {(isLoading || !promptData[selectedVideoIndex]?.videoUrl) ? (
+                <main className="bg-gray-75 w-full h-full flex flex-col p-6">
+                    {isLoading ? (
                         <div className="flex flex-col items-center justify-center w-full h-full">
                             <div className="w-16 h-16 mb-6">
                                 <div className="w-full h-full bg-gray-600 rounded-2xl animate-pulse"></div>
                             </div>
                             <p className="text-gray-400 text-lg mb-8">Spinning up preview...</p>
-
                             <div className="space-y-6">
                                 <div className="flex items-center gap-3">
                                     <Camera className="w-5 h-5 text-gray-500" />
                                     <span className="text-gray-400 text-sm">Instantly preview your changes</span>
                                 </div>
-
                                 <div className="flex items-center gap-3">
                                     <RefreshCw className="w-5 h-5 text-gray-500" />
                                     <span className="text-gray-400 text-sm">Set custom knowledge for every edit</span>
                                 </div>
-
                                 <div className="flex items-center gap-3">
                                     <div className="w-5 h-5 flex items-center justify-center">
                                         <div className="w-3 h-3 bg-gray-500 rounded"></div>
@@ -322,19 +338,21 @@ export default function PreviewScreen() {
                         <div className="flex flex-col flex-grow">
                             {/* Main video player */}
                             <div>Video {selectedVideoIndex + 1}</div>
-                            <video
-                                controls
-                                className="w-full h-[80%] object-contain rounded-xl"
-                                src={promptData[selectedVideoIndex]?.videoUrl}
-                                onError={(e) => {
-                                    console.error("Video loading error:", e);
-                                    setErrorMessage("Failed to load video. Please try again.");
-                                }}
-                            >
-                                <source src={promptData[selectedVideoIndex]?.videoUrl} type="video/mp4" />
-                                Your browser does not support the video tag.
-                            </video>
-
+                            {videoUrl ? (
+                                <video
+                                    controls
+                                    className="w-full h-[80%] object-contain rounded-xl"
+                                    src={videoUrl}
+                                    onError={() => {
+                                        setErrorMessage("Failed to load video. Please try again.");
+                                    }}
+                                >
+                                    <source src={videoUrl} type="video/mp4" />
+                                    Your browser does not support the video tag.
+                                </video>
+                            ) : (
+                                <div className="text-gray-400 text-sm">No video available</div>
+                            )}
                             {/* Video thumbnails */}
                             <div className="mt-6">
                                 <h3 className="text-gray-300 text-sm font-medium">Video History</h3>
@@ -342,22 +360,26 @@ export default function PreviewScreen() {
                                     {promptData.map((_, index) => (
                                         <div
                                             key={index}
-                                            className={`flex flex-col items-center gap-2 min-w-[120px] group cursor-pointer hover:scale-105`}
-                                            onClick={() => {
-                                                console.log('Thumbnail clicked, setting selectedVideoIndex to:', index);
-                                                setSelectedVideoIndex(index);
-                                            }}
+                                            className={`flex flex-col items-center gap-2 min-w-[120px] group cursor-pointer hover:scale-105 transition-all duration-200 ${selectedVideoIndex === index ? 'scale-105' : ''}`}
+                                            onClick={() => setSelectedVideoIndex(index)}
+                                            aria-label={`Select video ${index + 1}`}
                                         >
-                                            <div className={`w-20 h-20 rounded-lg overflow-hidden bg-gradient-to-br from-gray-700 to-gray-800 flex-shrink-0 border-2 border-gray-600 hover:border-blue-400 transition-colors duration-200 flex items-center justify-center relative ${selectedVideoIndex === index ? 'border-blue-400' : ''}`}>
-                                                <div
-                                                    className={`w-full flex h-full bg-black object-cover items-center justify-center ${selectedVideoIndex === index ? 'border-blue-400' : ''}   `}
-                                                >
+                                            <div className={`w-20 h-20 rounded-lg overflow-hidden flex-shrink-0 border-2 transition-all duration-200 flex items-center justify-center relative ${selectedVideoIndex === index
+                                                    ? 'border-blue-400 bg-blue-500/20 shadow-lg shadow-blue-400/25'
+                                                    : 'border-gray-600 bg-gradient-to-br from-gray-700 to-gray-800 hover:border-blue-400'
+                                                }`}>
+                                                <div className="w-full flex h-full bg-black object-cover items-center justify-center">
                                                     <div className="w-8 h-8 bg-white/20 rounded-full flex items-center justify-center">
                                                         <div className="w-0 h-0 border-l-[8px] border-l-white border-t-[6px] border-t-transparent border-b-[6px] border-b-transparent ml-1"></div>
                                                     </div>
                                                 </div>
                                             </div>
-                                            <span className="text-xs text-gray-400 font-medium">Video {index + 1}</span>
+                                            <span className={`text-xs font-medium transition-colors duration-200 ${selectedVideoIndex === index
+                                                    ? 'text-blue-400 font-semibold'
+                                                    : 'text-gray-400'
+                                                }`}>
+                                                Video {index + 1}
+                                            </span>
                                         </div>
                                     ))}
                                 </div>
@@ -367,5 +389,5 @@ export default function PreviewScreen() {
                 </main>
             </div>
         </div>
-    )
+    );
 }

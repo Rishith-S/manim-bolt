@@ -69,11 +69,19 @@ export default async function processQueue() {
                     const pythonCode = extractPythonCode(text as string);
                     if (!pythonCode) {
                         console.error("No valid Python code found in LLM response.");
+                        notifySSEClients(promptDetails.userId, promptDetails.videoId, { 
+                            status: 'error', 
+                            errormessage: "No valid Python code found in AI response. Please try again with a different prompt." 
+                        });
                         return;
                     }
 
                     if (!isCodeSafe(pythonCode)) {
                         console.error("The extracted code contains unsafe patterns. Aborting.");
+                        notifySSEClients(promptDetails.userId, promptDetails.videoId, { 
+                            status: 'error', 
+                            errormessage: "The generated code contains unsafe patterns and cannot be executed." 
+                        });
                         return;
                     }
 
@@ -196,9 +204,15 @@ export default async function processQueue() {
                                             failureAttempts: promptDetails.failureAttempts - 1,
                                             delayBeforeTrials: promptDetails.delayBeforeTrials + 2,
                                         };
-                                        await redis.lpush("foodIds", retryPromptDetails);
+                                        await redis.lpush("prompts", retryPromptDetails);
                                         processQueue()
                                     }, promptDetails.delayBeforeTrials * 1000);
+                                } else {
+                                    // No more retry attempts, notify client of failure
+                                    notifySSEClients(promptDetails.userId, promptDetails.videoId, { 
+                                        status: 'error', 
+                                        errormessage: "Failed to generate video after multiple attempts. Please try again with a different prompt." 
+                                    });
                                 }
                             }
                         } catch (err) {

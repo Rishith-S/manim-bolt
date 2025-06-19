@@ -20,6 +20,10 @@ export function notifySSEClients(userId:string,videoId:string,result:Result) {
   if (sseConnections.has(key)) {
     const res = sseConnections.get(key);
     res.write(`data: ${JSON.stringify(result)}\n\n`);
-    sseConnections.delete(key);
+    
+    // Only delete the connection if the status is 'close' or 'error'
+    if (result.status === 'close' || result.status === 'error') {
+      sseConnections.delete(key);
+    }
   }
 }
