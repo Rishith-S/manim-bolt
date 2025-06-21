@@ -2,9 +2,17 @@ import { ArrowUp } from 'lucide-react';
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import axios from 'axios';
+import Loader from '../utils/Loader';
+import { toast } from 'react-hot-toast';
+
+interface Video {
+    videoId: number;
+    createdAt: Date;
+}
 
 const Homepage: React.FC = () => {
     const [inputValue, setInputValue] = useState('');
+    const [brightness, setBrightness] = useState(25);
     const texts = [
         "Hello World!",
         "Welcome to React",
@@ -16,6 +24,35 @@ const Homepage: React.FC = () => {
     const [currentTextIndex, setCurrentTextIndex] = useState(0);
     const [currentText, setCurrentText] = useState('');
     const [isDeleting, setIsDeleting] = useState(false);
+    const [loading, setLoading] = useState(false);
+
+    // Brightness animation effect
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            setBrightness(100);
+        }, 100);
+        return () => clearTimeout(timer);
+    }, []);
+
+    const [userHistory, setUserHistory] = useState<Video[]>([]);
+
+    useEffect(() => {
+        const getUserHistory = async () => {
+            try {
+                setLoading(true);
+                const res = await axios.post(`${import.meta.env.VITE_SERVER_URL}/api/v1/chatHistory/getUserHistory`, {
+                    userId: localStorage.getItem('email'),
+                }, { withCredentials: true });
+                setUserHistory((res.data as { userHistory: Video[] }).userHistory);
+            } catch (error) {
+                console.error('Error fetching user history:', error);   
+            } finally {
+                setLoading(false);
+            }
+        }
+        getUserHistory();
+    }, []);
+
     useEffect(() => {
         const currentFullText = texts[currentTextIndex];
 
@@ -45,27 +82,45 @@ const Homepage: React.FC = () => {
 
     const handlePromptSubmit = async () => {
         if (inputValue.length > 0) {
-            localStorage.setItem("prompt", inputValue);
-            const res = await axios.post(`${import.meta.env.VITE_SERVER_URL}/api/v1/execute/getVideoId`, {
-                withCredentials: true,
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                data: {
-                    userId: localStorage.getItem('userId'),
-                },
-            });
-            
-            // Type assertion to handle the response data
-            const responseData = res.data as { videoId: string };
-            navigate(`/videos/${responseData.videoId}`);
+            try {
+                localStorage.setItem("prompt", inputValue);
+                const res = await axios.post(`${import.meta.env.VITE_SERVER_URL}/api/v1/execute/getVideoId`, {
+                    userId: localStorage.getItem('email'),
+                }, { 
+                    withCredentials: true,
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                });
+                
+                // Type assertion to handle the response data
+                const responseData = res.data as { videoId: number };
+                navigate(`/videos/${responseData.videoId}`);
+            } catch (error: any) {
+                if (error.response?.status === 403) {
+                    // Handle video limit reached error
+                    const errorMessage = error.response.data?.message || 'You can only create up to 5 videos.';
+                    toast.error(errorMessage);
+                } else {
+                    console.error('Error creating video:', error);
+                    toast.error('An error occurred while creating the video. Please try again.');
+                }
+            }
         }
+    }
+
+    if(loading){
+        return (
+            <div className='w-screen min-h-full z-10 overflow-y-auto bg-gray-50'>
+                <Loader />
+            </div>
+        )
     }
 
     return (
         <div className='w-screen min-h-full z-10 overflow-y-auto bg-gray-50'>
             <div
-                className="absolute h-[91.5%] w-[100%] z-20 pointer-events-none"
+                className="absolute h-[100%] w-[100%] z-20 pointer-events-none"
                 style={{
                     backgroundImage: 'url("/src/assets/noise.png")',
                     backgroundRepeat: 'repeat',
@@ -73,11 +128,12 @@ const Homepage: React.FC = () => {
                 }}
             />
             <div
-                className="absolute left-1/2 h-[91.5%] w-full -translate-x-1/2 z-10 brightness-110 pointer-events-none"
+                className="absolute left-1/2 h-[100%] w-full -translate-x-1/2 z-10 pointer-events-none transition-all duration-1000 ease-in-out"
                 style={{
                     backgroundImage: 'url("/src/assets/gradient-optimized.svg")',
                     backgroundRepeat: 'repeat',
-                    backgroundPosition: 'center top'
+                    backgroundPosition: 'center top',
+                    filter: `brightness(${brightness}%)`
                 }}
             />
             <main className="relative z-30 flex flex-col items-center justify-center px-6">
@@ -111,21 +167,42 @@ const Homepage: React.FC = () => {
                         </div>
                     </div>
                 </div>
-                <div className='flex flex-col h-full w-[95%] mt-[10%] mb-6 rounded-lg bg-black px-4 py-2'>
-                    <div className='items-center flex '>
-                        <div className='font-bold rounded-sm px-3 text-white bg-orange-600 p-2'>R</div>
-                        <p className='text-white p-4'>Rishi's Work</p>
-                    </div>
-                    <div>
-                        <div onClick={() => {
-                            window.scrollTo({ top: 0, behavior: 'smooth' });
-                        setInputValue('');
-                        const textarea = document.getElementById('prompt') as HTMLTextAreaElement;
-                        if (textarea) {
-                            textarea.focus();
-                        }
-                        }} className='bg-gray-25 flex items-center justify-center my-2 rounded-md h-32 w-64 cursor-pointer'>
-                            <p className='text-md text-gray-100'>+ create video</p>
+                <div className='w-full max-w-4xl mt-10 mb-6'>
+                    <div className="bg-gray-50/95 rounded-xl p-6">
+                        <div className='flex items-center gap-3 mb-6'>
+                            <div className='font-bold rounded-md px-3 text-white bg-orange-600 p-2 text-lg'>R</div>
+                            <h2 className='text-white text-xl font-semibold'>Rishi's Work</h2>
+                            <span className='text-sm text-gray-400 font-medium bg-gray-25 px-2 py-1 rounded-full'>{userHistory.length} videos</span>
+                        </div>
+
+                        <div className='grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4'>
+                            <div 
+                                onClick={() => {
+                                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                                    setInputValue('');
+                                    const textarea = document.getElementById('prompt') as HTMLTextAreaElement;
+                                    if (textarea) {
+                                        textarea.focus();
+                                    }
+                                }} 
+                                className='bg-gray-25 flex flex-col items-center justify-center rounded-lg h-40 cursor-pointer transition-colors hover:bg-gray-75 border-2 border-dashed border-gray-400 hover:border-gray-300'
+                            >
+                                <div className='text-4xl text-gray-400'>+</div>
+                                <p className='text-md text-gray-300 mt-2'>Create new video</p>
+                            </div>
+
+                            {userHistory.map((video) => (
+                                <div onClick={()=>{navigate(`/videos/${video.videoId}`)}} key={video.videoId} className='bg-gray-25 rounded-lg h-40 flex flex-col justify-between p-4 group cursor-pointer hover:bg-gray-75 transition-colors'>
+                                    <div>
+                                        <p className='text-white font-bold text-lg'>Video #{video.videoId}</p>
+                                        <p className='text-sm text-gray-400'>
+                                            {new Date(video.createdAt).toLocaleDateString('en-US', {
+                                                year: 'numeric', month: 'short', day: 'numeric'
+                                            })}
+                                        </p>
+                                    </div>
+                                </div>
+                            ))}
                         </div>
                     </div>
                 </div>

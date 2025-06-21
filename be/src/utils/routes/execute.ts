@@ -10,12 +10,38 @@ const router = express.Router();
 
 router.post('/getVideoId', allowCredentials, async (req, res) => {
     const { userId } = req.body;
-    const videoId = await prisma.video.findMany({
+    
+    // Count existing videos for this user
+    const videoCount = await prisma.video.count({
+        where: {
+            userId,
+        }
+    });
+    
+    // Check if user has reached the limit of 5 videos
+    if (videoCount >= 5) {
+        res.status(403).json({ 
+            'error': 'Video limit reached', 
+            'message': 'You can only create up to 5 videos. Please delete some videos to create new ones.' 
+        });
+        return;
+    }
+    
+    // Find the highest videoId for this user
+    const existingVideos = await prisma.video.findMany({
         where: {
             userId,
         },
+        orderBy: {
+            videoId: 'desc'
+        },
+        take: 1
     });
-    res.status(200).json({ 'videoId': videoId.length+1 });
+    
+    // Calculate the next videoId (start from 1 if no videos exist)
+    const nextVideoId = existingVideos.length > 0 ? existingVideos[0].videoId + 1 : 1;
+
+    res.status(200).json({ 'videoId': nextVideoId });
     return;
 });
 

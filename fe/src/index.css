@@ -28,3 +28,14 @@ textarea::-webkit-scrollbar-thumb {
   border-radius: 8px;
   background: rgba(175, 175, 175, 0.8); 
 }
+
+@tailwind utilities;
+
+.no-scrollbar::-webkit-scrollbar {
+    display: none;
+}
+
+.no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+}

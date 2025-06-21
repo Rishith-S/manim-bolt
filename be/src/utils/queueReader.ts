@@ -10,7 +10,6 @@ import { QueueObject } from "./types";
 import { notifySSEClients } from './sse';
 import prisma from './prisma';
 
-
 let isProcessing = false;
 let shouldContinueProcessing = true;
 
@@ -57,6 +56,33 @@ export default async function processQueue() {
                         videoId: parseInt(promptDetails.videoId),
                     },
                 })
+                
+                // Check if user has exceeded the maximum number of videos (5) only when creating a new video
+                if (!video) {
+                    const userVideoCount = await prisma.video.count({
+                        where: {
+                            userId: promptDetails.userId,
+                        },
+                    });
+                    
+                    if (userVideoCount >= 5) {
+                        notifySSEClients(promptDetails.userId, promptDetails.videoId, { 
+                            status: 'error', 
+                            errormessage: "Video limit exceeded. Maximum 5 videos allowed per user." 
+                        });
+                        return;
+                    }
+                }
+                
+                // Check if prompt limit exceeded (max 5 prompts per video)
+                if (video && video.prompt.length >= 5) {
+                    notifySSEClients(promptDetails.userId, promptDetails.videoId, { 
+                        status: 'error', 
+                        errormessage: "Prompt limit exceeded. Maximum 5 prompts allowed per video." 
+                    });
+                    return;
+                }
+                
                 if (video) {
                     prompt += `\n\nThe user has already created a video with the same prompt. Please edit the video to the user's request. The user's previous prompt was ${JSON.stringify(video.prompt)}`;
                 }

@@ -5,6 +5,7 @@ import InputBox from './InputBox';
 import { useNavigate, useParams } from 'react-router';
 import axios from 'axios';
 import type { UserDetails } from '../utils/Callback';
+import { Turnstile } from '@marsidev/react-turnstile';
 
 export default function Auth() {
     const {type} = useParams()
@@ -18,11 +19,13 @@ export default function Auth() {
     const [currentTextIndex, setCurrentTextIndex] = useState(0);
     const [currentText, setCurrentText] = useState('');
     const [isDeleting, setIsDeleting] = useState(false);
+    const [name, setName] = useState('');
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [loginOrSignup, setLoginOrSignup] = useState(type==='login'?true:false);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState("");
+    const [token,setToken] = useState("");
     const navigate = useNavigate();
     useEffect(() => {
         const currentFullText = texts[currentTextIndex];
@@ -53,24 +56,33 @@ export default function Auth() {
 
     useEffect(() => {
         setLoginOrSignup(type === 'login');
+        setError("");
+        setToken("");
+        setEmail("");
+        setPassword("");
     }, [type]);
 
-    const handleEmailLogin = async () => {
+    const handleEmailLogin = async (e: React.FormEvent<HTMLFormElement>) => {
+        e.preventDefault();
         setIsLoading(true);
         if (!email || !password) {
           setError("Please enter both email and password");
         } else {
           try {
             setError("");
-            const res = await axios.post(`${import.meta.env.VITE_SERVER_URL}/api/v1/auth/login/email-and-password`,{
+            const res = await axios.post(`${import.meta.env.VITE_SERVER_URL}/api/v1/auth/${type==='login'?'login':'signup'}/email-and-password`,{
+              name,
               email,
-              password
-            },{withCredentials:true});
+              password,
+              token
+            },{withCredentials:true,headers:{'Content-Type':'application/json'}});
             const data = res.data as any;
-            if (typeof data !== "object" || data == null) {
-              setError("Unexpected server response");
-            } else if (data.status === "error") {
-              setError(typeof data.message === "string" ? data.message : "An error occurred");
+            if (data.statusCode === 404) {
+              setError("Invalid email or password");
+            } else if (data.statusCode === 403) {
+              setError("Invalid reCAPTCHA token reload the page and try again");
+            } else if (data.statusCode === 500) {
+              setError("Internal server error");
             } else {
               const userDetails: UserDetails = res.data as unknown as UserDetails;
               localStorage.setItem("name", userDetails.name);
@@ -78,13 +90,8 @@ export default function Auth() {
               localStorage.setItem("accessToken", userDetails.accessToken);
               navigate("/");
             }
-          } catch (error: any) {
-            console.log(error);
-            if (error.response?.status === 401) {
-              setError("Invalid email or password");
-            } else {
-              setError(error instanceof Error ? error.message : "An unexpected error occurred");
-            }
+          } catch (error: any) { 
+            setError(error.response.data.message);
           } finally{
             setIsLoading(false);
           }
@@ -92,12 +99,10 @@ export default function Auth() {
       };
     
       const handleGoogleLogin = async () => {
-        console.log("google login");
         setIsLoading(true);
         setError("");
         try {
           const response = (await axios.get(`${import.meta.env.VITE_SERVER_URL}/api/v1/auth/url/${loginOrSignup ? "login" : "signup"}`)) as any;
-          console.log('response',response.data.url);
           // OAuth requires redirect to external domain, so page refresh is necessary
           window.location.assign(response.data.url);
         } catch (error: any) {
@@ -160,6 +165,14 @@ export default function Auth() {
                     {/* Email/Password Form */}
                     <form onSubmit={handleEmailLogin}>
                         {/* Email field */}
+                        {
+                            type==='signup' && (
+                                <div className="mb-4">
+                                    <InputBox value={name} setValue={setName} type="text" label='Name' disabled={isLoading} />
+                                </div>
+                            )
+                        }
+
                         <div className="mb-4">
                             <InputBox value={email} setValue={setEmail} type="text" label='Email' disabled={isLoading} />
                         </div>
@@ -168,6 +181,13 @@ export default function Auth() {
                         <div className="mb-6">
                             <InputBox value={password} setValue={setPassword} type="password" label='Password' disabled={isLoading} />
                         </div>
+
+                        {/* Turnstile */}
+                        <Turnstile 
+                            key={type} 
+                            onSuccess={(token)=>{setToken(token)}} 
+                            siteKey={`${import.meta.env.VITE_TURNSTILE_SITEKEY}`} 
+                        />
 
                         {/* Sign up/login button */}
                         <button

@@ -11,7 +11,6 @@ dotenv.config()
 const authRouter = Router()
 authRouter.get('/url/:type', (req, res) => {
   const type = req.params.type
-  console.log('type',type);
   res.json({
     url: `${process.env.AuthUrl}?${queryString.stringify({
       client_id: process.env.GOOGLE_CLIENT_ID,
@@ -159,6 +158,21 @@ authRouter.get('/token', async (req: Request, res: Response) => {
 
 authRouter.post('/login/email-and-password', async (req, res) => {
   try {
+    let formData = new FormData();
+    formData.append('secret', process.env.TURNSTILE_SECRET_KEY!);
+    formData.append('response', req.body.token);
+
+    const url = 'https://challenges.cloudflare.com/turnstile/v0/siteverify';
+    const result = await fetch(url, {
+      body: formData,
+      method: 'POST',
+    });
+    const challengeSucceeded = (await result.json()).success;
+
+    if (!challengeSucceeded) {
+      res.status(403).json({ message: "Invalid reCAPTCHA token" });
+      return;
+    }
     const { email, password } = req.body;
     const userExistsorNot = await prisma.user.findFirst({
       where: {
@@ -205,12 +219,12 @@ authRouter.post('/login/email-and-password', async (req, res) => {
           });
           return;
         } else {
-          res.status(200).json({ status : 'error', message: `Email or Password doesn't match.` })
+          res.status(200).json({ status : 'error', message: `Email doesn't match.` })
           return;
         }
       });
     } else {
-      res.status(200).json({ status : 'error', message: `Email or Password doesn't match.` })
+      res.status(404).json({ status : 'error', message: `Email or Password doesn't exist.` })
       return;
     }
   } catch (error) {
@@ -221,6 +235,21 @@ authRouter.post('/login/email-and-password', async (req, res) => {
 
 authRouter.post('/signup/email-and-password', async (req, res) => {
   try {
+    let formData = new FormData();
+    formData.append('secret', process.env.TURNSTILE_SECRET_KEY!);
+    formData.append('response', req.body.token);
+
+    const url = 'https://challenges.cloudflare.com/turnstile/v0/siteverify';
+    const result = await fetch(url, {
+      body: formData,
+      method: 'POST',
+    });
+    const challengeSucceeded = (await result.json()).success;
+
+    if (!challengeSucceeded) {
+      res.status(403).json({ message: "Invalid reCAPTCHA token" });
+      return;
+    }
     const { name, email, password } = req.body;
     const userExistsorNot = await prisma.user.findFirst({
       where: {

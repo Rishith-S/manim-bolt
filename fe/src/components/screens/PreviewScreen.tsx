@@ -35,6 +35,7 @@ export default function PreviewScreen() {
     const [promptData, setPromptData] = useState<ChatMessage[]>([]);
     const [type, setType] = useState(false);
     const [selectedVideoIndex, setSelectedVideoIndex] = useState(0);
+    const [showChat, setShowChat] = useState(false);
     const chatEndRef = useRef<HTMLDivElement>(null);
     const eventSourceRef = useRef<EventSource | null>(null);
 
@@ -94,7 +95,6 @@ export default function PreviewScreen() {
         try {
             setLoading(true);
             setErrorMessage('');
-            
             // Always close existing connection first
             if (eventSourceRef.current) {
                 eventSourceRef.current.close();
@@ -218,12 +218,18 @@ export default function PreviewScreen() {
         : promptData[promptData.length - 1]?.videoUrl;
 
     return (
-        <div className="h-full flex flex-col z-10 overflow-hidden bg-gray-75 text-white">
+        <div className="pt-16 lg:pt-32 mt-2 flex flex-col z-10 overflow-hidden bg-gray-75 text-white">
             {/* Error message is handled by toast, so no need to render here */}
-            <div className="flex flex-row w-screen h-full">
-                {/* Sidebar */}
-                <aside className="w-[35%] bg-gray-75 border-r border-gray-50 flex flex-col h-full">
-                    <div className="p-4 h-full flex-grow overflow-y-auto transition-all duration-300 custom-scrollbar">
+            <div className="flex flex-col lg:flex-row w-screen h-full relative">
+                {showChat && (
+                    <div
+                        className="lg:hidden fixed inset-0 bg-black/50 z-10"
+                        onClick={() => setShowChat(false)}
+                    />
+                )}
+                {/* Sidebar - Mobile: slide-out panel, Desktop: 35% */}
+                <aside className={`${showChat ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0 lg:block lg:w-[35%] bg-gray-75 border-r border-gray-50 flex flex-col h-full absolute lg:relative z-20 lg:z-auto w-[85%] lg:w-[35%] transition-transform duration-300 ease-in-out`}>
+                    <div className="p-4 h-full flex-grow overflow-y-auto transition-all duration-300 no-scrollbar">
                         {promptData.length > 0 && promptData.map((msg, index) => (
                             <div key={index} className="flex flex-col mt-4">
                                 {/* Prompt bubble: always right-aligned */}
@@ -310,7 +316,18 @@ export default function PreviewScreen() {
                     </div>
                 </aside>
                 {/* Main Content */}
-                <main className="bg-gray-75 w-full h-full flex flex-col p-6">
+                <main className="bg-gray-75 w-full h-full flex flex-col p-4 lg:p-6">
+                    {/* Mobile Chat Toggle Button */}
+                    <div className="lg:hidden flex justify-between items-center mb-4">
+                        <h1 className="text-lg font-semibold text-white">ClipCraft</h1>
+                        <button
+                            onClick={() => setShowChat(!showChat)}
+                            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors"
+                        >
+                            {showChat ? 'Hide Chat' : 'Show Chat'}
+                        </button>
+                    </div>
+                    
                     {isLoading ? (
                         <div className="flex flex-col items-center justify-center w-full h-full">
                             <div className="w-16 h-16 mb-6">
@@ -337,11 +354,11 @@ export default function PreviewScreen() {
                     ) : (
                         <div className="flex flex-col flex-grow">
                             {/* Main video player */}
-                            <div>Video {selectedVideoIndex + 1}</div>
+                            <div className="text-white text-sm mb-2">Video {selectedVideoIndex + 1}</div>
                             {videoUrl ? (
                                 <video
                                     controls
-                                    className="w-full h-[80%] object-contain rounded-xl"
+                                    className="w-full h-[60vh] lg:h-[80%] object-contain rounded-xl"
                                     src={videoUrl}
                                     onError={() => {
                                         setErrorMessage("Failed to load video. Please try again.");
@@ -354,23 +371,23 @@ export default function PreviewScreen() {
                                 <div className="text-gray-400 text-sm">No video available</div>
                             )}
                             {/* Video thumbnails */}
-                            <div className="mt-6">
+                            <div className="mt-4 lg:mt-6">
                                 <h3 className="text-gray-300 text-sm font-medium">Video History</h3>
-                                <div className="flex flex-row gap-3 overflow-x-auto custom-scrollbar mt-2 pt-2">
+                                <div className="flex flex-row gap-2 lg:gap-3 overflow-x-auto custom-scrollbar mt-2 pt-2">
                                     {promptData.map((_, index) => (
                                         <div
                                             key={index}
-                                            className={`flex flex-col items-center gap-2 min-w-[120px] group cursor-pointer hover:scale-105 transition-all duration-200 ${selectedVideoIndex === index ? 'scale-105' : ''}`}
+                                            className={`flex flex-col items-center gap-1 lg:gap-2 min-w-[80px] lg:min-w-[120px] group cursor-pointer hover:scale-105 transition-all duration-200 ${selectedVideoIndex === index ? 'scale-105' : ''}`}
                                             onClick={() => setSelectedVideoIndex(index)}
                                             aria-label={`Select video ${index + 1}`}
                                         >
-                                            <div className={`w-20 h-20 rounded-lg overflow-hidden flex-shrink-0 border-2 transition-all duration-200 flex items-center justify-center relative ${selectedVideoIndex === index
+                                            <div className={`w-16 h-16 lg:w-20 lg:h-20 rounded-lg overflow-hidden flex-shrink-0 border-2 transition-all duration-200 flex items-center justify-center relative ${selectedVideoIndex === index
                                                     ? 'border-blue-400 bg-blue-500/20 shadow-lg shadow-blue-400/25'
                                                     : 'border-gray-600 bg-gradient-to-br from-gray-700 to-gray-800 hover:border-blue-400'
                                                 }`}>
                                                 <div className="w-full flex h-full bg-black object-cover items-center justify-center">
-                                                    <div className="w-8 h-8 bg-white/20 rounded-full flex items-center justify-center">
-                                                        <div className="w-0 h-0 border-l-[8px] border-l-white border-t-[6px] border-t-transparent border-b-[6px] border-b-transparent ml-1"></div>
+                                                    <div className="w-6 h-6 lg:w-8 lg:h-8 bg-white/20 rounded-full flex items-center justify-center">
+                                                        <div className="w-0 h-0 border-l-[6px] lg:border-l-[8px] border-l-white border-t-[4px] lg:border-t-[6px] border-t-transparent border-b-[4px] lg:border-b-[6px] border-b-transparent ml-0.5 lg:ml-1"></div>
                                                     </div>
                                                 </div>
                                             </div>

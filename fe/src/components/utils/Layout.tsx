@@ -1,7 +1,10 @@
-import { Outlet } from 'react-router-dom'
+import { Outlet, useLocation } from 'react-router-dom'
 import Navbar from './Navbar'
 
 export default function Layout() {
+  const location = useLocation();
+  const isVideoPage = location.pathname.startsWith('/videos/');
+
   return (
     <div className="flex flex-col h-screen overflow-hidden relative">
       {/* Glassmorphism Navbar */}
@@ -11,7 +14,7 @@ export default function Layout() {
         </div>
       </div>
       {/* Padding to prevent content from being hidden behind navbar */}
-      <div className="flex-1 pt-16 min-h-0 flex bg-gradient-to-br">
+      <div className={`flex-1 min-h-0 flex bg-gradient-to-br ${!isVideoPage ? 'pt-16' : ''}`}>
         <Outlet />
       </div>
     </div>

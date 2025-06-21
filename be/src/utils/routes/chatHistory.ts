@@ -5,6 +5,23 @@ import { supabase } from "../supabase";
 
 const router = Router();
 
+router.post('/getUserHistory', allowCredentials, async (req, res) => {
+    const { userId } = req.body;
+    const userHistory = await prisma.video.findMany({
+        where: {
+            userId: userId,
+        },
+        select: {
+            videoId: true,
+            createdAt: true,
+        },
+        orderBy: {
+            createdAt: 'desc',
+        },
+    });
+    res.status(200).json({ userHistory });
+});
+
 router.post('/getChatHistory', allowCredentials, async (req, res) => {
     const { userId, videoId } = req.body;
     console.log(userId, videoId);
