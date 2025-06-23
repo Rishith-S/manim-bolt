@@ -24,6 +24,20 @@ authRouter.get('/url/:type', (req, res) => {
   })
 })
 
+// Add GitHub OAuth URL route
+authRouter.get('/github/url/:type', (req, res) => {
+  const type = req.params.type
+  const redirectUri = type === "login" ? process.env.GITHUB_REDIRECT_URL_LOGIN : process.env.GITHUB_REDIRECT_URL_SIGNUP
+  res.json({
+    url: `https://github.com/login/oauth/authorize?${queryString.stringify({
+      client_id: process.env.GITHUB_CLIENT_ID,
+      redirect_uri: redirectUri,
+      scope: 'read:user user:email',
+      state: `github_${type}`,
+    })}`,
+  })
+})
+
 authRouter.get('/refresh', verifyAuth, async (req, res) => {
   try {
     const token = req.cookies?.jwt;
@@ -149,6 +163,131 @@ authRouter.get('/token', async (req: Request, res: Response) => {
         maxAge: 3 * 24 * 60 * 60 * 1000
       });
       res.status(statusCode).send({ name: user.name, email: user.email, accessToken, message, picture });
+    } catch (err) {
+      console.error('Error: ', err)
+      res.status(500).json({ message: 'Server error' })
+    }
+  }
+})
+
+// Add GitHub OAuth token exchange route
+authRouter.get('/github/token', async (req: Request, res: Response) => {
+  const { code, type } = req.query
+  if (!code) res.status(400).json({ message: 'Authorization code must be provided' })
+  else {
+    try {
+      // Exchange code for access token
+      const tokenResponse = await fetch('https://github.com/login/oauth/access_token', {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          client_id: process.env.GITHUB_CLIENT_ID,
+          client_secret: process.env.GITHUB_CLIENT_SECRET,
+          code,
+          redirect_uri: type === "login" ? process.env.GITHUB_REDIRECT_URL_LOGIN : process.env.GITHUB_REDIRECT_URL_SIGNUP,
+        }),
+      });
+
+      const tokenData = await tokenResponse.json();
+      
+      if (tokenData.error) {
+        res.status(400).json({ message: 'GitHub OAuth error: ' + tokenData.error_description });
+        return;
+      }
+
+      const accessToken = tokenData.access_token;
+
+      // Get user information
+      const userResponse = await fetch('https://api.github.com/user', {
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Accept': 'application/vnd.github.v3+json',
+        },
+      });
+
+      const userData = await userResponse.json();
+
+      // Get user email
+      const emailResponse = await fetch('https://api.github.com/user/emails', {
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Accept': 'application/vnd.github.v3+json',
+        },
+      });
+
+      const emails = await emailResponse.json();
+      const primaryEmail = emails.find((email: any) => email.primary)?.email || userData.email;
+
+      const user = { 
+        name: userData.name || userData.login, 
+        email: primaryEmail, 
+        picture: userData.avatar_url 
+      };
+
+      let message = '';
+      let statusCode = 200;
+
+      if (type === 'login') {
+        const userRecord = await prisma.user.findUnique({
+          where: {
+            email: user.email
+          }
+        })
+        if (!userRecord) {
+          res.status(404).json({
+            "message": "account not found please signup"
+          })
+          return
+        }
+        else {
+          statusCode = 200;
+          message = "account login successful";
+        }
+      } else {
+        try {
+          await prisma.user.create({
+            data: {
+              name: user.name,
+              email: user.email,
+              accountType: 'oauth',
+              password: '', 
+            }
+          })
+          statusCode = 200;
+          message = "account created successfully";
+        } catch (error) {
+          console.log('error',error);
+          res.status(422).json({
+            "message": "problem in account creation"
+          })
+          return
+        }
+      }
+
+      // Sign a new token
+      const jwtAccessToken = jwt.sign(
+        {
+          user
+        },
+        process.env.TOKEN_SECRET!, ({ expiresIn: '1d' })
+      )
+      const refreshToken = jwt.sign(
+        {
+          user
+        },
+        process.env.TOKEN_SECRET!, ({ expiresIn: '3d' })
+      )
+
+      res.cookie('jwt', refreshToken, {
+        httpOnly: true,
+        sameSite: 'none',
+        secure: true,
+        maxAge: 3 * 24 * 60 * 60 * 1000
+      });
+      res.status(statusCode).send({ name: user.name, email: user.email, accessToken: jwtAccessToken, message, picture: user.picture });
     } catch (err) {
       console.error('Error: ', err)
       res.status(500).json({ message: 'Server error' })

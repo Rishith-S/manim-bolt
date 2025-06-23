@@ -17,6 +17,8 @@ function AppRoutes() {
     <Routes>
       <Route path="/auth/callback/signup" element={<Callback />} />
       <Route path="/auth/callback/login" element={<Callback />} />
+      <Route path="/auth/github/callback/signup" element={<Callback />} />
+      <Route path="/auth/github/callback/login" element={<Callback />} />
       <Route path="/auth/:type" element={<Auth />} />
       {!isAuthRoute && (
         <Route element={<PersistentLogin />}>

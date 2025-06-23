@@ -15,14 +15,19 @@ export default function Callback() {
   const navigate = useNavigate();
   const type = location.pathname.split("/").slice(-1)[0];
   
+  // Detect if this is a GitHub callback
+  const isGithubCallback = location.pathname.includes('/github');
+  
   useEffect(() => {
     (async () => {
       if (called.current) return; 
       called.current = true;
       
       try {
+        // Use different endpoints for Google vs GitHub
+        const endpoint = isGithubCallback ? 'github/token' : 'token';
         const res = await axios.get(
-          `${import.meta.env.VITE_SERVER_URL}/api/v1/auth/token${
+          `${import.meta.env.VITE_SERVER_URL}/api/v1/auth/${endpoint}${
             window.location.search
           }&type=${type}`,
           { withCredentials: true }
@@ -43,13 +48,13 @@ export default function Callback() {
         console.error(err);
         
         // Check if it's a 404 error (account not found)
-        if (err && typeof err === 'object' && 'response' in err && err.response && typeof err.response === 'object' && 'status' in err.response && err.response.status === 404) {
+        if (err && typeof err === 'object' && 'response' in err && err.response && typeof err.response === 'object' && 'status' in err.response && (err.response as any).status === 404) {
           toast.error("Account not found. Please sign up to create a new account.");
           navigate(`/auth/${type}`, { replace: true });
         } else {
           let errorMessage = 'Unknown error occurred';
           if (err && typeof err === 'object' && 'response' in err && err.response && typeof err.response === 'object' && 'data' in err.response && err.response.data && typeof err.response.data === 'object' && 'message' in err.response.data) {
-            errorMessage = String(err.response.data.message);
+            errorMessage = String((err.response.data as any).message);
           } else if (err instanceof Error) {
             errorMessage = err.message;
           }
@@ -58,7 +63,7 @@ export default function Callback() {
         }
       }
     })();
-  }, [navigate, type]);
+  }, [navigate, type, isGithubCallback]);
   
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-75">

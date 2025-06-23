@@ -122,7 +122,9 @@ export default function Auth() {
         setIsLoading(true);
         setError("");
         try {
-          window.location.assign(`https://github.com/login/oauth/authorize?client_id=${import.meta.env.VITE_GITHUB_CLIENT_ID}`);
+          const response = (await axios.get(`${import.meta.env.VITE_SERVER_URL}/api/v1/auth/github/url/${loginOrSignup ? "login" : "signup"}`)) as any;
+          // OAuth requires redirect to external domain, so page refresh is necessary
+          window.location.assign(response.data.url);
         } catch (error: any) {
           console.log(error);
           if (error.response?.status === 401) {
