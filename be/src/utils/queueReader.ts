@@ -1,5 +1,5 @@
-// import { Mistral } from '@mistralai/mistralai';
-import OpenAI from 'openai';
+import { Mistral } from '@mistralai/mistralai';
+// import OpenAI from 'openai';
 import { Redis } from "@upstash/redis";
 import { exec } from "child_process";
 import * as fs from "fs/promises";
@@ -48,10 +48,10 @@ export default async function processQueue() {
                 if (!promptDetails) {
                     break;
                 }
-                // const apiKey = process.env.MISTRAL_API_KEY;
-                // const client = new Mistral({ apiKey: apiKey });
-                const apiKey = process.env.OPENAI_API_KEY;
-                const client = new OpenAI({ apiKey: apiKey });
+                const apiKey = process.env.MISTRAL_API_KEY;
+                const client = new Mistral({ apiKey: apiKey });
+                // const apiKey = process.env.OPENAI_API_KEY;
+                // const client = new OpenAI({ apiKey: apiKey });
                 let prompt = getPrompt(promptDetails.userPrompt);
                 const video = await prisma.video.findFirst({
                     where: {
@@ -90,16 +90,16 @@ export default async function processQueue() {
                     prompt += `\n\nThe user has already created a video with the same prompt. Please edit the video to the user's request. The user's previous prompt was ${JSON.stringify(video.prompt)}`;
                 }
                 try {
-                    // const chatResponse = await client.chat.complete({
-                    //     model: 'mistral-large-latest',
-                    //     messages: [{ role: 'user', content: prompt }],
-                    // });
-                    // const text = chatResponse.choices![0].message.content!;
-                    const chatResponse = await client.chat.completions.create({
-                        model: 'gpt-4',
+                    const chatResponse = await client.chat.complete({
+                        model: 'mistral-large-latest',
                         messages: [{ role: 'user', content: prompt }],
                     });
-                    const text = chatResponse.choices[0].message.content!;
+                    const text = chatResponse.choices![0].message.content!;
+                    // const chatResponse = await client.chat.completions.create({
+                    //     model: 'gpt-4',
+                    //     messages: [{ role: 'user', content: prompt }],
+                    // });
+                    // const text = chatResponse.choices[0].message.content!;
                     const pythonCode = extractPythonCode(text as string);
                     if (!pythonCode) {
                         console.error("No valid Python code found in LLM response.");
