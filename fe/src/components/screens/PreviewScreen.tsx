@@ -341,13 +341,13 @@ export default function PreviewScreen() {
                                 </div>
                                 <div className="flex items-center gap-3">
                                     <RefreshCw className="w-5 h-5 text-gray-500" />
-                                    <span className="text-gray-400 text-sm">Set custom knowledge for every edit</span>
+                                    <span className="text-gray-400 text-sm">Physics based animations</span>
                                 </div>
                                 <div className="flex items-center gap-3">
                                     <div className="w-5 h-5 flex items-center justify-center">
                                         <div className="w-3 h-3 bg-gray-500 rounded"></div>
                                     </div>
-                                    <span className="text-gray-400 text-sm">Connect Supabase for backend</span>
+                                    <span className="text-gray-400 text-sm">Create animations with AI</span>
                                 </div>
                             </div>
                         </div>

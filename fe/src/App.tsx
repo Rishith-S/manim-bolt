@@ -20,10 +20,16 @@ function AppRoutes() {
       <Route path="/auth/github/callback/signup" element={<Callback />} />
       <Route path="/auth/github/callback/login" element={<Callback />} />
       <Route path="/auth/:type" element={<Auth />} />
+      
+      {/* Routes with Layout but no authentication requirement */}
+      <Route element={<Layout />}>
+        <Route path="/" element={<Homepage />} />
+      </Route>
+      
+      {/* Protected routes requiring authentication */}
       {!isAuthRoute && (
         <Route element={<PersistentLogin />}>
           <Route element={<Layout />}>
-            <Route path="/" element={<Homepage />} />
             <Route path='/videos/:videoId' element={<PreviewScreen />} />
           </Route>
         </Route>
