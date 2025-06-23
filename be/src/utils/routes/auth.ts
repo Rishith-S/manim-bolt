@@ -149,12 +149,6 @@ authRouter.get('/token', async (req: Request, res: Response) => {
         process.env.TOKEN_SECRET!, ({ expiresIn: '3d' })
       )
 
-      const userDetails = await prisma.user.findFirst({
-        where: {
-          email: user.email
-        }
-      })
-
       res.cookie('jwt', refreshToken, {
         httpOnly: true,
         sameSite: 'none',

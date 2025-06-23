@@ -43,14 +43,14 @@ export default function Navbar() {
                         <button onClick={handleLogout} className="px-4 py-2 bg-gray-800 text-white rounded-lg font-medium hover:bg-gray-700">Logout</button>
                     </>
                 ) : (
-                    <>
+                    <div className="flex items-center space-x-2">
                         <button onClick={() => { navigate('/auth/login', { replace: true }) }} className="px-4 py-2 text-white bg-gray-50 border-1 border-gray-25 hover:bg-gray-25 font-medium rounded-md">
                             Log in
                         </button>
                         <button onClick={() => { navigate('/auth/signup', { replace: true }) }} className="px-4 py-2 bg-white text-black rounded-lg font-medium hover:bg-white/75">
                             Sign up
                         </button>
-                    </>
+                    </div>
                 )}
             </div>
         </header>
