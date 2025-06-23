@@ -10,11 +10,11 @@ import { Turnstile } from '@marsidev/react-turnstile';
 export default function Auth() {
     const {type} = useParams()
     const texts = [
-        "Hello World!",
-        "Welcome to React",
-        "This is amazing!",
-        "Let's build something cool",
-        "Typewriter effects are fun!"
+        "Create a math animation",
+        "Show me a physics concept",
+        "Visualize an algorithm",
+        "Explain a scientific process",
+        "Generate an educational video"
     ];
     const [currentTextIndex, setCurrentTextIndex] = useState(0);
     const [currentText, setCurrentText] = useState('');
@@ -118,6 +118,24 @@ export default function Auth() {
         }
       };
 
+      const handleGithubLogin = async () => {
+        setIsLoading(true);
+        setError("");
+        try {
+          window.location.assign(`https://github.com/login/oauth/authorize?client_id=${import.meta.env.VITE_GITHUB_CLIENT_ID}`);
+        } catch (error: any) {
+          console.log(error);
+          if (error.response?.status === 401) {
+            setError("Authentication failed. Please try again.");
+          } else {
+            navigate('/auth/login');
+          }
+        }
+        finally{
+          setIsLoading(false);
+        }
+      };
+
     return (
         <div className="min-h-screen flex bg-gray-75">
             {/* Left side - Form */}
@@ -142,7 +160,7 @@ export default function Auth() {
 
                         <button
                             className="w-full bg-gray-50 hover:bg-gray-800 border border-gray-25 rounded-lg py-1.5 px-4 text-white flex items-center justify-center gap-3 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                            // onClick={handleGithubLogin} // TODO: Implement GitHub login handler
+                            onClick={handleGithubLogin}
                             disabled={isLoading}
                         >
                             <GithubIcon />
@@ -196,7 +214,7 @@ export default function Auth() {
                             disabled={isLoading}
                         >
                             {isLoading ? (
-                                <span>Loading...</span>
+                                <span>Signing in...</span>
                             ) : (
                                 loginOrSignup ? "Login" : "Sign Up"
                             )}

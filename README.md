@@ -1,1 +1,1 @@
-# manim-bolt
+# ClipCraft

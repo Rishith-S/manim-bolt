@@ -284,7 +284,7 @@ export default function PreviewScreen() {
                                 <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
                                 <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
                                 <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
-                                <span className="text-xs text-gray-400 ml-2">AI is typing...</span>
+                                <span className="text-xs text-gray-400 ml-2">ClipCraft is crafting...</span>
                             </div>
                         )}
                         <div ref={chatEndRef} />
@@ -295,7 +295,7 @@ export default function PreviewScreen() {
                             <textarea
                                 name="promptbox"
                                 id="prompt"
-                                placeholder="Ask ClipCraft to create a video..."
+                                placeholder="Ask ClipCraft to create an animation..."
                                 value={inputValue}
                                 onChange={(e) => setInputValue(e.target.value)}
                                 className="w-full h-12 resize-none bg-gray-75 border border-gray-50 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-400 focus:outline-none focus:border-gray-25 transition-all duration-300 shadow-inner"
@@ -333,7 +333,7 @@ export default function PreviewScreen() {
                             <div className="w-16 h-16 mb-6">
                                 <div className="w-full h-full bg-gray-600 rounded-2xl animate-pulse"></div>
                             </div>
-                            <p className="text-gray-400 text-lg mb-8">Spinning up preview...</p>
+                            <p className="text-gray-400 text-lg mb-8">Crafting your animation...</p>
                             <div className="space-y-6">
                                 <div className="flex items-center gap-3">
                                     <Camera className="w-5 h-5 text-gray-500" />
@@ -354,7 +354,7 @@ export default function PreviewScreen() {
                     ) : (
                         <div className="flex flex-col flex-grow">
                             {/* Main video player */}
-                            <div className="text-white text-sm mb-2">Video {selectedVideoIndex + 1}</div>
+                            <div className="text-white text-sm mb-2">Animation {selectedVideoIndex + 1}</div>
                             {videoUrl ? (
                                 <video
                                     controls
@@ -368,18 +368,18 @@ export default function PreviewScreen() {
                                     Your browser does not support the video tag.
                                 </video>
                             ) : (
-                                <div className="text-gray-400 text-sm">No video available</div>
+                                <div className="text-gray-400 text-sm">No animation available</div>
                             )}
                             {/* Video thumbnails */}
                             <div className="mt-4 lg:mt-6">
-                                <h3 className="text-gray-300 text-sm font-medium">Video History</h3>
+                                <h3 className="text-gray-300 text-sm font-medium">Animation History</h3>
                                 <div className="flex flex-row gap-2 lg:gap-3 overflow-x-auto custom-scrollbar mt-2 pt-2">
                                     {promptData.map((_, index) => (
                                         <div
                                             key={index}
                                             className={`flex flex-col items-center gap-1 lg:gap-2 min-w-[80px] lg:min-w-[120px] group cursor-pointer hover:scale-105 transition-all duration-200 ${selectedVideoIndex === index ? 'scale-105' : ''}`}
                                             onClick={() => setSelectedVideoIndex(index)}
-                                            aria-label={`Select video ${index + 1}`}
+                                            aria-label={`Select animation ${index + 1}`}
                                         >
                                             <div className={`w-16 h-16 lg:w-20 lg:h-20 rounded-lg overflow-hidden flex-shrink-0 border-2 transition-all duration-200 flex items-center justify-center relative ${selectedVideoIndex === index
                                                     ? 'border-blue-400 bg-blue-500/20 shadow-lg shadow-blue-400/25'
@@ -395,7 +395,7 @@ export default function PreviewScreen() {
                                                     ? 'text-blue-400 font-semibold'
                                                     : 'text-gray-400'
                                                 }`}>
-                                                Video {index + 1}
+                                                Animation {index + 1}
                                             </span>
                                         </div>
                                     ))}

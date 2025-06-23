@@ -24,7 +24,7 @@ export default function Navbar() {
 
     return (
         <header className="relative z-30 flex justify-between items-center w-full bg-transparent p-6 h-16">
-            <div className="flex items-center space-x-3">
+            <div className="flex cursor-pointer items-center space-x-3" onClick={() => { navigate('/', { replace: true }) }}>
                 <p className="text-2xl lg:text-4xl font-extrabold text-transparent bg-clip-text bg-gradient-to-tr from-orange-400 via-pink-400 to-purple-400 font-playful">
                     ClipCraft
                 </p>

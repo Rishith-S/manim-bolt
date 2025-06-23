@@ -14,11 +14,11 @@ const Homepage: React.FC = () => {
     const [inputValue, setInputValue] = useState('');
     const [brightness, setBrightness] = useState(25);
     const texts = [
-        "Hello World!",
-        "Welcome to React",
-        "This is amazing!",
-        "Let's build something cool",
-        "Typewriter effects are fun!"
+        "Create a math animation",
+        "Show me a physics concept",
+        "Visualize an algorithm",
+        "Explain a scientific process",
+        "Generate an educational video"
     ];
     const navigate = useNavigate();
     const [currentTextIndex, setCurrentTextIndex] = useState(0);
@@ -170,9 +170,9 @@ const Homepage: React.FC = () => {
                 <div className='w-full max-w-4xl mt-10 mb-6'>
                     <div className="bg-gray-50/95 rounded-xl p-6">
                         <div className='flex items-center gap-3 mb-6'>
-                            <div className='font-bold rounded-md px-3 text-white bg-orange-600 p-2 text-lg'>R</div>
-                            <h2 className='text-white text-xl font-semibold'>Rishi's Work</h2>
-                            <span className='text-sm text-gray-400 font-medium bg-gray-25 px-2 py-1 rounded-full'>{userHistory.length} videos</span>
+                            <div className='font-bold rounded-full h-12 w-12 items-center justify-center flex p-2 text-white bg-orange-600 text-lg'>{localStorage.getItem('name')?.charAt(0).toUpperCase()}</div>
+                            <h2 className='text-white text-xl font-semibold'>My Animations</h2>
+                            <span className='text-sm text-gray-400 font-medium bg-gray-25 px-2 py-1 rounded-full'>{userHistory.length} animations</span>
                         </div>
 
                         <div className='grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4'>
@@ -188,13 +188,13 @@ const Homepage: React.FC = () => {
                                 className='bg-gray-25 flex flex-col items-center justify-center rounded-lg h-40 cursor-pointer transition-colors hover:bg-gray-75 border-2 border-dashed border-gray-400 hover:border-gray-300'
                             >
                                 <div className='text-4xl text-gray-400'>+</div>
-                                <p className='text-md text-gray-300 mt-2'>Create new video</p>
+                                <p className='text-md text-gray-300 mt-2'>Create new animation</p>
                             </div>
 
                             {userHistory.map((video) => (
                                 <div onClick={()=>{navigate(`/videos/${video.videoId}`)}} key={video.videoId} className='bg-gray-25 rounded-lg h-40 flex flex-col justify-between p-4 group cursor-pointer hover:bg-gray-75 transition-colors'>
                                     <div>
-                                        <p className='text-white font-bold text-lg'>Video #{video.videoId}</p>
+                                        <p className='text-white font-bold text-lg'>Animation #{video.videoId}</p>
                                         <p className='text-sm text-gray-400'>
                                             {new Date(video.createdAt).toLocaleDateString('en-US', {
                                                 year: 'numeric', month: 'short', day: 'numeric'
